@@ -1,8 +1,8 @@
 streamlit
-pandas 
-numpy 
-scikit-learn 
-joblib 
-imbalanced-learn 
-google-genai 
+pandas
+numpy
+scikit-learn
+joblib
+imbalanced-learn
+google-genai
 openpyxl

@@ -50,6 +50,10 @@ The placement prediction component uses a **Random Forest** machine-learning mod
 
 The application provides a placement probability estimate based on the trained model and a separate profile readiness analysis.
 
+## 📸 Application Screenshots
+
+Screenshots of the application are available in the [`screenshots`](screenshots/) folder.
+
 ## 🛠️ Technology Stack
 
 - Python
@@ -75,6 +79,8 @@ Ai-Placement-Predictor/
 ├── placement_feature_names_final.pkl
 ├── placement_model_metadata.pkl
 ├── recommendation_rules.pkl
+│
+├── screenshots/
 │
 ├── README.md
 ├── LICENSE

@@ -1,5 +1,4 @@
 import os
-import re
 import joblib
 import numpy as np
 import pandas as pd
@@ -623,11 +622,6 @@ def get_career_interests(branch):
 
 def map_branch_for_model(branch):
 
-    """
-    The placement model was trained using grouped branch categories.
-    We keep the original student branch separately for Gemini guidance.
-    """
-
     if branch in [
         "Computer Science",
         "Information Technology",
@@ -658,77 +652,32 @@ def map_branch_for_model(branch):
     ]:
         return "Electrical"
 
-    if branch in [
-        "Civil Engineering"
-    ]:
+    if branch == "Civil Engineering":
         return "Civil"
 
-    if branch in [
-        "Chemical Engineering"
-    ]:
+    if branch == "Chemical Engineering":
         return "Chemical"
 
     return "Other"
 
 
 # ============================================================
-# DEGREE MAPPING HELPERS
+# CGPA CATEGORY
 # ============================================================
 
-def degree_aliases(degree):
+def get_cgpa_category(cgpa):
 
-    aliases = {
-        "BE": [
-            "BE",
-            "B.E",
-            "B.E.",
-            "Bachelor of Engineering"
-        ],
+    if cgpa < 6:
+        return "Low"
 
-        "BTech": [
-            "BTech",
-            "B.Tech",
-            "B.Tech.",
-            "Bachelor of Technology"
-        ],
+    if cgpa < 7.5:
+        return "Good"
 
-        "BSc": [
-            "BSc",
-            "B.Sc",
-            "B.Sc.",
-            "Bachelor of Science"
-        ],
-
-        "BCA": [
-            "BCA",
-            "Bachelor of Computer Applications"
-        ],
-
-        "BBA": [
-            "BBA",
-            "Bachelor of Business Administration"
-        ],
-
-        "BCom": [
-            "BCom",
-            "B.Com",
-            "B.Com.",
-            "Bachelor of Commerce"
-        ],
-
-        "BA": [
-            "BA",
-            "B.A",
-            "B.A.",
-            "Bachelor of Arts"
-        ]
-    }
-
-    return aliases.get(degree, [degree])
+    return "Excellent"
 
 
 # ============================================================
-# LOAD MODEL ONLY WHEN NEEDED
+# LOAD MODEL
 # ============================================================
 
 @st.cache_resource
@@ -748,34 +697,29 @@ def load_components():
         feature_names = feature_names.tolist()
 
     elif isinstance(feature_names, dict):
+
         if "feature_names" in feature_names:
             feature_names = feature_names["feature_names"]
+
         elif "features" in feature_names:
             feature_names = feature_names["features"]
+
         else:
             feature_names = list(feature_names.keys())
 
-    feature_names = [
-        str(x)
-        for x in feature_names
-    ]
+    feature_names = [str(x) for x in feature_names]
 
     recommendation_rules = {}
 
     if os.path.exists(RULE_FILE):
 
         try:
-            recommendation_rules = joblib.load(
-                RULE_FILE
-            )
+            recommendation_rules = joblib.load(RULE_FILE)
+
         except Exception:
             recommendation_rules = {}
 
-    return (
-        model,
-        feature_names,
-        recommendation_rules
-    )
+    return model, feature_names, recommendation_rules
 
 
 # ============================================================
@@ -810,10 +754,8 @@ def get_object_feature_names(obj):
     if names is not None:
 
         try:
-            return [
-                str(x)
-                for x in names
-            ]
+            return [str(x) for x in names]
+
         except Exception:
             pass
 
@@ -822,20 +764,11 @@ def get_object_feature_names(obj):
 
 def get_model_expected_features(model):
 
-    """
-    Find the actual columns used when the fitted estimator was trained.
-
-    This is critical because the feature pickle can contain columns that
-    are not necessarily the exact columns accepted by the fitted model.
-    """
-
-    # 1. Direct estimator
     names = get_object_feature_names(model)
 
     if names:
         return names
 
-    # 2. Pipeline / imblearn Pipeline
     named_steps = getattr(
         model,
         "named_steps",
@@ -851,7 +784,6 @@ def get_model_expected_features(model):
             if names:
                 return names
 
-    # 3. Generic pipeline steps
     steps = getattr(
         model,
         "steps",
@@ -871,43 +803,25 @@ def get_model_expected_features(model):
 
 
 # ============================================================
-# RAW STUDENT DATA
+# RAW MODEL DATA
 # ============================================================
 
 def build_raw_model_dataframe(student):
 
-    model_branch = map_branch_for_model(
-        student["ug_branch"]
-    )
-
     raw = {
-
         "gender": student["gender"],
-
         "age": student["age"],
-
         "degree": student["ug_degree"],
-
-        "branch": model_branch,
-
+        "branch": map_branch_for_model(
+            student["ug_branch"]
+        ),
         "cgpa": student["ug_cgpa"],
-
         "backlogs": student["backlogs"],
-
         "internships": student["internships"],
-
         "certifications": student["certifications"],
-
         "coding_skills": student["coding_skills"],
-
-        "communication_skills": (
-            student["communication_skills"]
-        ),
-
-        "aptitude_score": (
-            student["aptitude_score"]
-        ),
-
+        "communication_skills": student["communication_skills"],
+        "aptitude_score": student["aptitude_score"],
         "projects": student["projects"]
     }
 
@@ -921,117 +835,68 @@ def build_raw_model_dataframe(student):
 
 
 # ============================================================
-# CGPA CATEGORY
-# ============================================================
-
-def get_cgpa_category(cgpa):
-
-    if cgpa < 6:
-        return "Low"
-
-    if cgpa < 7.5:
-        return "Good"
-
-    return "Excellent"
-
-
-# ============================================================
-# BUILD ENCODED DATAFRAME
+# ENCODED CANDIDATES
 # ============================================================
 
 def build_encoded_candidates(student):
 
-    model_branch = map_branch_for_model(
-        student["ug_branch"]
-    )
-
     raw = {
-
         "gender": student["gender"],
-
         "age": student["age"],
-
         "degree": student["ug_degree"],
-
-        "branch": model_branch,
-
+        "branch": map_branch_for_model(
+            student["ug_branch"]
+        ),
         "cgpa": student["ug_cgpa"],
-
         "backlogs": student["backlogs"],
-
         "internships": student["internships"],
-
         "certifications": student["certifications"],
-
         "coding_skills": student["coding_skills"],
-
-        "communication_skills": (
-            student["communication_skills"]
-        ),
-
-        "aptitude_score": (
-            student["aptitude_score"]
-        ),
-
+        "communication_skills": student["communication_skills"],
+        "aptitude_score": student["aptitude_score"],
         "projects": student["projects"]
     }
 
     base_df = pd.DataFrame([raw])
 
-    base_df["cgpa_category"] = (
-        base_df["cgpa"].apply(
-            get_cgpa_category
-        )
+    base_df["cgpa_category"] = base_df["cgpa"].apply(
+        get_cgpa_category
     )
 
     candidates = []
 
-    # --------------------------------------------------------
-    # Candidate 1: normal grouped branch
-    # --------------------------------------------------------
-
-    candidate = pd.get_dummies(
-        base_df.copy(),
-        columns=[
-            "gender",
-            "degree",
-            "branch",
-            "cgpa_category"
-        ],
-        dtype=int
+    # Normal grouped branch
+    candidates.append(
+        pd.get_dummies(
+            base_df.copy(),
+            columns=[
+                "gender",
+                "degree",
+                "branch",
+                "cgpa_category"
+            ],
+            dtype=int
+        )
     )
 
-    candidates.append(candidate)
-
-    # --------------------------------------------------------
-    # Candidate 2: long original branch
-    # --------------------------------------------------------
-
+    # Original branch
     original_df = base_df.copy()
-
-    original_df["branch"] = student[
-        "ug_branch"
-    ]
-
-    original_encoded = pd.get_dummies(
-        original_df,
-        columns=[
-            "gender",
-            "degree",
-            "branch",
-            "cgpa_category"
-        ],
-        dtype=int
-    )
+    original_df["branch"] = student["ug_branch"]
 
     candidates.append(
-        original_encoded
+        pd.get_dummies(
+            original_df,
+            columns=[
+                "gender",
+                "degree",
+                "branch",
+                "cgpa_category"
+            ],
+            dtype=int
+        )
     )
 
-    # --------------------------------------------------------
-    # Candidate 3: common abbreviated branch names
-    # --------------------------------------------------------
-
+    # Abbreviated branch
     abbreviated = base_df.copy()
 
     abbreviation = {
@@ -1047,6 +912,8 @@ def build_encoded_candidates(student):
         "Automobile Engineering": "Automobile",
         "Production Engineering": "Production",
         "Industrial Engineering": "Industrial",
+        "Aeronautical Engineering": "Aeronautical",
+        "Aerospace Engineering": "Aerospace",
         "Electrical Engineering": "Electrical",
         "Electronics Engineering": "Electronics",
         "Electronics and Communication Engineering": "ECE",
@@ -1060,26 +927,56 @@ def build_encoded_candidates(student):
         student["ug_branch"]
     )
 
-    abbreviated_encoded = pd.get_dummies(
-        abbreviated,
-        columns=[
-            "gender",
-            "degree",
-            "branch",
-            "cgpa_category"
-        ],
-        dtype=int
+    candidates.append(
+        pd.get_dummies(
+            abbreviated,
+            columns=[
+                "gender",
+                "degree",
+                "branch",
+                "cgpa_category"
+            ],
+            dtype=int
+        )
     )
 
-    candidates.append(
-        abbreviated_encoded
-    )
+    # Degree aliases
+    degree_map = {
+        "BE": ["BE", "B.E", "B.E.", "Bachelor of Engineering"],
+        "BTech": ["BTech", "B.Tech", "B.Tech.", "Bachelor of Technology"],
+        "BSc": ["BSc", "B.Sc", "B.Sc.", "Bachelor of Science"],
+        "BCA": ["BCA", "Bachelor of Computer Applications"],
+        "BBA": ["BBA", "Bachelor of Business Administration"],
+        "BCom": ["BCom", "B.Com", "B.Com.", "Bachelor of Commerce"],
+        "BA": ["BA", "B.A", "B.A.", "Bachelor of Arts"]
+    }
+
+    for degree_variant in degree_map.get(
+        student["ug_degree"],
+        [student["ug_degree"]]
+    ):
+
+        degree_df = base_df.copy()
+        degree_df["degree"] = degree_variant
+
+        candidates.append(
+            pd.get_dummies(
+                degree_df,
+                columns=[
+                    "gender",
+                    "degree",
+                    "branch",
+                    "cgpa_category"
+                ],
+                dtype=int
+            )
+        )
 
     return candidates
 
 
 # ============================================================
-# ALIGN ENCODED DATA TO MODEL FEATURES
+# ALIGN DATAFRAME
 # ============================================================
 
 def align_encoded_dataframe(
@@ -1096,20 +993,18 @@ def align_encoded_dataframe(
 
     for column in encoded_df.columns:
 
-        column_name = str(column)
-
-        if column_name in aligned.columns:
+        if str(column) in aligned.columns:
 
             aligned.loc[
                 0,
-                column_name
+                str(column)
             ] = encoded_df.iloc[0][column]
 
     return aligned
 
 
 # ============================================================
-# INTELLIGENT MODEL INPUT
+# PREPARE MODEL INPUT
 # ============================================================
 
 def prepare_model_input(
@@ -1118,35 +1013,19 @@ def prepare_model_input(
     artifact_features
 ):
 
-    raw_df = build_raw_model_dataframe(
-        student
-    )
+    raw_df = build_raw_model_dataframe(student)
 
-    expected_features = (
-        get_model_expected_features(
-            model
-        )
-    )
+    expected_features = get_model_expected_features(model)
 
-    # --------------------------------------------------------
-    # CASE 1
-    # Model explicitly exposes raw training columns
-    # --------------------------------------------------------
-
+    # Raw model input
     if expected_features:
 
-        expected_set = set(
-            expected_features
+        expected_set = set(expected_features)
+
+        raw_overlap = expected_set.intersection(
+            RAW_FEATURE_NAMES
         )
 
-        raw_overlap = (
-            expected_set.intersection(
-                RAW_FEATURE_NAMES
-            )
-        )
-
-        # If model expects raw columns such as degree/branch/gender,
-        # send raw dataframe exactly in that order.
         if len(raw_overlap) >= 3:
 
             missing = [
@@ -1157,33 +1036,25 @@ def prepare_model_input(
 
             if not missing:
 
-                return raw_df[
-                    expected_features
-                ], "raw"
+                return (
+                    raw_df[expected_features],
+                    "raw"
+                )
 
-    # --------------------------------------------------------
-    # CASE 2
-    # Model expects encoded features
-    # --------------------------------------------------------
-
-    candidates = build_encoded_candidates(
-        student
-    )
+    # Encoded model input
+    candidates = build_encoded_candidates(student)
 
     if expected_features:
 
         best_candidate = None
         best_overlap = -1
 
-        expected_set = set(
-            expected_features
-        )
+        expected_set = set(expected_features)
 
         for candidate in candidates:
 
             overlap = len(
-                set(candidate.columns)
-                .intersection(
+                set(candidate.columns).intersection(
                     expected_set
                 )
             )
@@ -1195,26 +1066,24 @@ def prepare_model_input(
 
         if best_candidate is not None:
 
-            aligned = align_encoded_dataframe(
-                best_candidate,
-                expected_features
+            return (
+                align_encoded_dataframe(
+                    best_candidate,
+                    expected_features
+                ),
+                "encoded_model_features"
             )
 
-            return aligned, "encoded_model_features"
+    # Artifact fallback
+    if candidates:
 
-    # --------------------------------------------------------
-    # CASE 3
-    # Fall back to artifact feature names
-    # --------------------------------------------------------
-
-    for candidate in candidates:
-
-        aligned = align_encoded_dataframe(
-            candidate,
-            artifact_features
+        return (
+            align_encoded_dataframe(
+                candidates[0],
+                artifact_features
+            ),
+            "encoded_artifact_features"
         )
-
-        return aligned, "encoded_artifact_features"
 
     raise ValueError(
         "Unable to construct model input."
@@ -1222,7 +1091,7 @@ def prepare_model_input(
 
 
 # ============================================================
-# PROBABILITY EXTRACTION
+# PROBABILITY
 # ============================================================
 
 def get_positive_probability(
@@ -1231,23 +1100,14 @@ def get_positive_probability(
     prediction
 ):
 
-    if not hasattr(
-        model,
-        "predict_proba"
-    ):
-
+    if not hasattr(model, "predict_proba"):
         return None
 
-    probabilities = model.predict_proba(
-        model_input
-    )
-
     probabilities = np.asarray(
-        probabilities
+        model.predict_proba(model_input)
     )
 
     if probabilities.ndim != 2:
-
         return None
 
     row = probabilities[0]
@@ -1258,20 +1118,38 @@ def get_positive_probability(
         None
     )
 
+    if classes is None:
+
+        named_steps = getattr(
+            model,
+            "named_steps",
+            None
+        )
+
+        if named_steps:
+
+            for _, step in reversed(
+                list(named_steps.items())
+            ):
+
+                classes = getattr(
+                    step,
+                    "classes_",
+                    None
+                )
+
+                if classes is not None:
+                    break
+
     if classes is not None:
 
         classes = list(classes)
 
-        # Prefer class 1 when present.
         if 1 in classes:
-
-            index = classes.index(1)
-
             return float(
-                row[index]
+                row[classes.index(1)]
             )
 
-        # Sometimes labels are strings.
         for target in [
             "1",
             "Placed",
@@ -1283,26 +1161,15 @@ def get_positive_probability(
 
             if target in classes:
 
-                index = classes.index(
-                    target
-                )
-
                 return float(
-                    row[index]
+                    row[classes.index(target)]
                 )
 
-    # Binary classifier fallback.
     if len(row) == 2:
-
         return float(row[1])
 
-    # If there is only one probability,
-    # use it according to prediction.
     if len(row) == 1:
-
-        value = float(row[0])
-
-        return value
+        return float(row[0])
 
     return None
 
@@ -1314,30 +1181,15 @@ def get_positive_probability(
 def get_readiness_level(probability):
 
     if probability is None:
-
-        return (
-            "Prediction available",
-            "🔵"
-        )
+        return "Prediction available", "🔵"
 
     if probability >= 0.75:
-
-        return (
-            "High Placement Readiness",
-            "🟢"
-        )
+        return "High Placement Readiness", "🟢"
 
     if probability >= 0.50:
+        return "Moderate Placement Readiness", "🟡"
 
-        return (
-            "Moderate Placement Readiness",
-            "🟡"
-        )
-
-    return (
-        "Needs Improvement",
-        "🔴"
-    )
+    return "Needs Improvement", "🔴"
 
 
 # ============================================================
@@ -1389,7 +1241,6 @@ def get_profile_strengths(student):
         )
 
     if not strengths:
-
         strengths.append(
             "The profile provides a foundation that can be strengthened through focused preparation."
         )
@@ -1398,7 +1249,7 @@ def get_profile_strengths(student):
 
 
 # ============================================================
-# PROFILE DEVELOPMENT AREAS
+# PROFILE GAPS
 # ============================================================
 
 def get_profile_gaps(student):
@@ -1406,52 +1257,28 @@ def get_profile_gaps(student):
     gaps = []
 
     if student["ug_cgpa"] < 7:
-
-        gaps.append(
-            "Academic performance"
-        )
+        gaps.append("Academic performance")
 
     if student["backlogs"] > 0:
-
-        gaps.append(
-            "Backlog clearance"
-        )
+        gaps.append("Backlog clearance")
 
     if student["internships"] == 0:
-
-        gaps.append(
-            "Industry/internship exposure"
-        )
+        gaps.append("Industry/internship exposure")
 
     if student["projects"] < 2:
-
-        gaps.append(
-            "Practical project experience"
-        )
+        gaps.append("Practical project experience")
 
     if student["certifications"] == 0:
-
-        gaps.append(
-            "Relevant certifications"
-        )
+        gaps.append("Relevant certifications")
 
     if student["coding_skills"] < 6:
-
-        gaps.append(
-            "Technical/computational skills"
-        )
+        gaps.append("Technical/computational skills")
 
     if student["communication_skills"] < 6:
-
-        gaps.append(
-            "Communication and interview skills"
-        )
+        gaps.append("Communication and interview skills")
 
     if student["aptitude_score"] < 60:
-
-        gaps.append(
-            "Aptitude preparation"
-        )
+        gaps.append("Aptitude preparation")
 
     return gaps
 
@@ -1467,63 +1294,19 @@ def generate_recommendations(
 
     recommendations = []
 
-    gaps = get_profile_gaps(
-        student
-    )
+    gaps = get_profile_gaps(student)
 
-    for gap in gaps:
+    rule_map = {
+        "Technical/computational skills": "coding_skills",
+        "Communication and interview skills": "communication_skills",
+        "Aptitude preparation": "aptitude_score",
+        "Academic performance": "cgpa",
+        "Backlog clearance": "backlogs",
+        "Industry/internship exposure": "internships",
+        "Practical project experience": "projects",
+        "Relevant certifications": "certifications"
+    }
 
-        rule_key = None
-
-        if gap == "Technical/computational skills":
-            rule_key = "coding_skills"
-
-        elif gap == "Communication and interview skills":
-            rule_key = "communication_skills"
-
-        elif gap == "Aptitude preparation":
-            rule_key = "aptitude_score"
-
-        elif gap == "Academic performance":
-            rule_key = "cgpa"
-
-        elif gap == "Backlog clearance":
-            rule_key = "backlogs"
-
-        elif gap == "Industry/internship exposure":
-            rule_key = "internships"
-
-        elif gap == "Practical project experience":
-            rule_key = "projects"
-
-        elif gap == "Relevant certifications":
-            rule_key = "certifications"
-
-        if (
-            rule_key
-            and isinstance(
-                recommendation_rules,
-                dict
-            )
-            and rule_key in recommendation_rules
-        ):
-
-            rule = recommendation_rules[
-                rule_key
-            ]
-
-            if isinstance(rule, dict):
-
-                message = rule.get(
-                    "message"
-                )
-
-                if message:
-                    recommendations.append(
-                        message
-                    )
-
-    # Always provide useful fallback recommendations.
     fallback_map = {
 
         "Technical/computational skills":
@@ -1553,32 +1336,55 @@ def generate_recommendations(
 
     for gap in gaps:
 
-        fallback = fallback_map.get(
-            gap
-        )
+        rule_key = rule_map.get(gap)
+
+        if (
+            rule_key
+            and isinstance(recommendation_rules, dict)
+            and rule_key in recommendation_rules
+        ):
+
+            rule = recommendation_rules[rule_key]
+
+            if isinstance(rule, dict):
+
+                message = rule.get("message")
+
+                if message:
+                    recommendations.append(message)
+
+    for gap in gaps:
+
+        fallback = fallback_map.get(gap)
 
         if (
             fallback
             and fallback not in recommendations
         ):
-
-            recommendations.append(
-                fallback
-            )
+            recommendations.append(fallback)
 
     return recommendations[:5]
 
 
 # ============================================================
-# GEMINI
+# GEMINI CLIENT
 # ============================================================
 
-def get_gemini_client(api_key):
+def get_gemini_client():
 
     from google import genai
 
+    # IMPORTANT:
+    # API key comes ONLY from Streamlit Secrets.
+    api_key = st.secrets["GEMINI_API_KEY"]
+
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY is not configured in Streamlit Secrets."
+        )
+
     return genai.Client(
-        api_key=api_key.strip()
+        api_key=str(api_key).strip()
     )
 
 
@@ -1588,7 +1394,6 @@ def get_gemini_client(api_key):
 
 def extract_gemini_text(interaction):
 
-    # google-genai Interactions API
     text_value = getattr(
         interaction,
         "output_text",
@@ -1596,12 +1401,8 @@ def extract_gemini_text(interaction):
     )
 
     if text_value:
+        return str(text_value).strip()
 
-        return str(
-            text_value
-        ).strip()
-
-    # Try output objects.
     output = getattr(
         interaction,
         "output",
@@ -1610,18 +1411,13 @@ def extract_gemini_text(interaction):
 
     if output:
 
+        items = (
+            output
+            if isinstance(output, list)
+            else [output]
+        )
+
         collected = []
-
-        if isinstance(
-            output,
-            list
-        ):
-
-            items = output
-
-        else:
-
-            items = [output]
 
         for item in items:
 
@@ -1644,29 +1440,27 @@ def extract_gemini_text(interaction):
 
             if content:
 
-                if isinstance(
-                    content,
-                    list
-                ):
+                content_items = (
+                    content
+                    if isinstance(content, list)
+                    else [content]
+                )
 
-                    for part in content:
+                for part in content_items:
 
-                        part_text = getattr(
-                            part,
-                            "text",
-                            None
+                    part_text = getattr(
+                        part,
+                        "text",
+                        None
+                    )
+
+                    if part_text:
+                        collected.append(
+                            str(part_text)
                         )
 
-                        if part_text:
-                            collected.append(
-                                str(part_text)
-                            )
-
         if collected:
-
-            return "\n".join(
-                collected
-            ).strip()
+            return "\n".join(collected).strip()
 
     return ""
 
@@ -1680,22 +1474,16 @@ def build_gemini_prompt(
     prediction_context=None
 ):
 
-    branch = student[
-        "ug_branch"
-    ]
+    branch = student["ug_branch"]
 
-    branch_skills = get_branch_skills(
-        branch
-    )
+    branch_skills = get_branch_skills(branch)
 
     branch_skill_lines = []
 
     for skill in branch_skills:
 
-        score_key = f"skill_{skill}"
-
         score = student.get(
-            score_key,
+            f"skill_{skill}",
             5
         )
 
@@ -1709,19 +1497,6 @@ def build_gemini_prompt(
 
     critical_gaps = []
 
-    for skill in branch_skills:
-
-        score = student.get(
-            f"skill_{skill}",
-            5
-        )
-
-        if score <= 4:
-
-            critical_gaps.append(
-                f"{skill} ({score}/10)"
-            )
-
     development = []
 
     for skill in branch_skills:
@@ -1731,53 +1506,47 @@ def build_gemini_prompt(
             5
         )
 
-        if 5 <= score <= 6:
+        if score <= 4:
+            critical_gaps.append(
+                f"{skill} ({score}/10)"
+            )
 
+        elif score <= 6:
             development.append(
                 f"{skill} ({score}/10)"
             )
 
-    if critical_gaps:
-
-        critical_gap_text = "\n".join(
+    critical_gap_text = (
+        "\n".join(
             f"- {x}"
             for x in critical_gaps
         )
+        if critical_gaps
+        else
+        "- No critical branch-skill gap based on the self-assessment."
+    )
 
-    else:
-
-        critical_gap_text = (
-            "- No critical branch-skill gap based on the self-assessment."
-        )
-
-    if development:
-
-        development_text = "\n".join(
+    development_text = (
+        "\n".join(
             f"- {x}"
             for x in development
         )
+        if development
+        else
+        "- Continue strengthening the existing skill profile."
+    )
 
-    else:
-
-        development_text = (
-            "- Continue strengthening the existing skill profile."
-        )
-
-    if prediction_context:
-
-        prediction_text = prediction_context
-
-    else:
-
-        prediction_text = (
-            "Placement prediction was not requested. "
-            "Provide career guidance based on the student profile only."
-        )
+    prediction_text = (
+        prediction_context
+        if prediction_context
+        else
+        "Placement prediction was not requested. Provide career guidance based on the student profile only."
+    )
 
     return f"""
 You are an expert student career counselor and employability advisor.
 
-Your task is to provide personalized, realistic and field-specific career guidance.
+Provide personalized, realistic and field-specific career guidance.
 
 IMPORTANT RULES:
 
@@ -1791,13 +1560,13 @@ IMPORTANT RULES:
 8. Do not mention internal machine-learning encoding, feature names, SHAP internals, or implementation details.
 9. Do not mention resume analysis.
 10. Do not guarantee employment or placement.
-11. Do not invent achievements that are not in the profile.
+11. Do not invent achievements.
 12. Identify realistic skill gaps.
 13. Make the guidance practical and actionable.
-14. Use the student's branch, skills, education, interests and target career goal together.
-15. If the target career is different from the academic branch, explain the bridge skills needed.
-16. For non-CS branches, keep the technical recommendations appropriate to that branch.
-17. The answer should be useful for a student preparing for internships, jobs or higher studies.
+14. Use branch, skills, education, interests and target career goal together.
+15. If the target career differs from the academic branch, explain the bridge skills needed.
+16. For non-CS branches, keep technical recommendations appropriate to that branch.
+17. Make the answer useful for internships, jobs or higher studies.
 
 ============================================================
 STUDENT PROFILE
@@ -1819,25 +1588,13 @@ UG CGPA:
 {student["ug_cgpa"]}
 
 Postgraduate Education:
-{
-    student["pg_degree"]
-    if student["has_pg"]
-    else "Not Applicable"
-}
+{student["pg_degree"] if student["has_pg"] else "Not Applicable"}
 
 PG Specialization:
-{
-    student["pg_branch"]
-    if student["has_pg"]
-    else "Not Applicable"
-}
+{student["pg_branch"] if student["has_pg"] else "Not Applicable"}
 
 PG CGPA:
-{
-    student["pg_cgpa"]
-    if student["has_pg"]
-    else "Not Applicable"
-}
+{student["pg_cgpa"] if student["has_pg"] else "Not Applicable"}
 
 ============================================================
 CAREER DIRECTION
@@ -1847,11 +1604,7 @@ Career Interest:
 {student["career_interest"]}
 
 Target Career Goal:
-{
-    student["target_career_goal"]
-    if student["target_career_goal"]
-    else "Not specified"
-}
+{student["target_career_goal"] if student["target_career_goal"] else "Not specified"}
 
 ============================================================
 PLACEMENT PROFILE
@@ -1907,15 +1660,15 @@ SKILLS NEEDING DEVELOPMENT
 REQUIRED RESPONSE
 ============================================================
 
-Use the following headings exactly:
+Use these headings exactly:
 
 ## 1. Overall Profile Assessment
 
-Assess the student's current academic, practical and career profile.
+Assess the student's academic, practical and career profile.
 
 ## 2. Career Direction
 
-Explain how the student's branch, career interest and target goal fit together.
+Explain how branch, career interest and target goal fit together.
 
 ## 3. Recommended Career Paths
 
@@ -1927,15 +1680,15 @@ Identify the strongest current advantages.
 
 ## 5. Skill Gap Analysis
 
-Identify the most important gaps and explain why they matter for the target career.
+Identify the most important gaps and explain why they matter.
 
 ## 6. Areas to Improve
 
-Give specific and practical improvement actions.
+Give specific practical improvement actions.
 
 ## 7. 30-Day Improvement Plan
 
-Create a Week 1, Week 2, Week 3 and Week 4 plan.
+Create Week 1, Week 2, Week 3 and Week 4 plans.
 
 ## 8. Technical Topics to Study
 
@@ -1943,31 +1696,32 @@ Recommend branch-specific technical topics.
 
 ## 9. Industry Tools and Professional Skills
 
-Recommend relevant tools, software, laboratory methods, business tools, engineering tools, analytical tools or professional skills based on the actual branch.
+Recommend relevant tools, software, laboratory methods, business tools,
+engineering tools, analytical tools or professional skills based on the branch.
 
 ## 10. Project Ideas
 
 Give EXACTLY 3 project ideas.
 
 Each project must include:
+
 - Project title
 - What the student should build/do
 - Skills demonstrated
-- Why it is relevant to the student's target career
+- Why it is relevant to the target career
 
 The three projects must be appropriate for the student's actual branch.
 
 ## 11. Interview Preparation
 
 Cover:
+
 - Core technical/domain questions
 - HR questions
 - Communication
 - Project explanation
 - Internship explanation
 - Aptitude preparation where relevant
-
-Keep recommendations specific to the student's field.
 
 Finish with a short practical action summary.
 
@@ -1984,25 +1738,12 @@ def generate_ai_guidance(
     prediction_context=None
 ):
 
-    api_key = st.session_state.get(
-        "gemini_api_key",
-        ""
-    )
-
-    if not api_key:
-
-        raise ValueError(
-            "Please enter your Gemini API key."
-        )
-
     prompt = build_gemini_prompt(
         student,
         prediction_context
     )
 
-    client = get_gemini_client(
-        api_key
-    )
+    client = get_gemini_client()
 
     interaction = client.interactions.create(
         model="gemini-3.6-flash",
@@ -2015,7 +1756,6 @@ def generate_ai_guidance(
     )
 
     if not answer:
-
         raise ValueError(
             "Gemini returned an empty response."
         )
@@ -2052,32 +1792,19 @@ def build_student_profile(
     student = {
 
         "gender": gender,
-
         "age": age,
 
-        # Normalized names used by the model layer.
         "ug_degree": ug_degree,
-
         "degree": ug_degree,
 
         "ug_branch": ug_branch,
+        "branch": map_branch_for_model(ug_branch),
 
-        "branch": map_branch_for_model(
-            ug_branch
-        ),
-
-        "ug_cgpa": float(
-            ug_cgpa
-        ),
-
-        "cgpa": float(
-            ug_cgpa
-        ),
+        "ug_cgpa": float(ug_cgpa),
+        "cgpa": float(ug_cgpa),
 
         "has_pg": has_pg,
-
         "pg_degree": pg_degree,
-
         "pg_branch": pg_branch,
 
         "pg_cgpa": (
@@ -2086,41 +1813,23 @@ def build_student_profile(
             else None
         ),
 
-        "backlogs": int(
-            backlogs
-        ),
+        "backlogs": int(backlogs),
+        "internships": int(internships),
+        "projects": int(projects),
+        "certifications": int(certifications),
 
-        "internships": int(
-            internships
-        ),
-
-        "projects": int(
-            projects
-        ),
-
-        "certifications": int(
-            certifications
-        ),
-
-        "coding_skills": int(
-            coding_skills
-        ),
-
+        "coding_skills": int(coding_skills),
         "communication_skills": int(
             communication_skills
         ),
-
         "aptitude_score": int(
             aptitude_score
         ),
 
-        "career_interest": (
-            career_interest
-        ),
+        "career_interest": career_interest,
 
-        "target_career_goal": (
+        "target_career_goal":
             target_career_goal.strip()
-        )
     }
 
     for skill, score in domain_scores.items():
@@ -2133,7 +1842,7 @@ def build_student_profile(
 
 
 # ============================================================
-# RUN PLACEMENT PREDICTION
+# RUN PREDICTION
 # ============================================================
 
 def run_prediction(student):
@@ -2144,79 +1853,36 @@ def run_prediction(student):
         recommendation_rules
     ) = load_components()
 
-    model_input, input_type = (
-        prepare_model_input(
-            model,
-            student,
-            artifact_features
-        )
+    model_input, input_type = prepare_model_input(
+        model,
+        student,
+        artifact_features
     )
-
-    # --------------------------------------------------------
-    # Prediction
-    # --------------------------------------------------------
 
     prediction = model.predict(
         model_input
     )[0]
 
-    probability = (
-        get_positive_probability(
-            model,
-            model_input,
-            prediction
-        )
+    probability = get_positive_probability(
+        model,
+        model_input,
+        prediction
     )
-
-    # --------------------------------------------------------
-    # Prediction text
-    # --------------------------------------------------------
-
-    prediction_number = None
 
     try:
-        prediction_number = int(
-            prediction
-        )
+        prediction_number = int(prediction)
+
     except Exception:
-        pass
+        prediction_number = None
 
     if prediction_number == 1:
-
-        prediction_text = (
-            "LIKELY PLACED"
-        )
+        prediction_text = "LIKELY PLACED"
 
     elif prediction_number == 0:
-
-        prediction_text = (
-            "NOT PLACED"
-        )
+        prediction_text = "NOT PLACED"
 
     else:
-
-        prediction_text = str(
-            prediction
-        )
-
-    # --------------------------------------------------------
-    # Recommendations
-    # --------------------------------------------------------
-
-    strengths = get_profile_strengths(
-        student
-    )
-
-    gaps = get_profile_gaps(
-        student
-    )
-
-    recommendations = (
-        generate_recommendations(
-            student,
-            recommendation_rules
-        )
-    )
+        prediction_text = str(prediction)
 
     return {
 
@@ -2228,20 +1894,26 @@ def run_prediction(student):
 
         "model_input_type": input_type,
 
-        "model_features": list(
-            model_input.columns
-        )
-        if hasattr(
-            model_input,
-            "columns"
-        )
-        else [],
+        "model_features": (
+            list(model_input.columns)
+            if hasattr(
+                model_input,
+                "columns"
+            )
+            else []
+        ),
 
-        "strengths": strengths,
+        "strengths":
+            get_profile_strengths(student),
 
-        "gaps": gaps,
+        "gaps":
+            get_profile_gaps(student),
 
-        "recommendations": recommendations
+        "recommendations":
+            generate_recommendations(
+                student,
+                recommendation_rules
+            )
     }
 
 
@@ -2281,47 +1953,16 @@ st.subheader(
 mode = st.radio(
     "What would you like to use?",
     [
-        "🔮 Placement Prediction + AI Guidance",
-        "🤖 AI Career Guidance Only"
+        "🔮 Placement Prediction",
+        "🤖 AI Career Guidance"
     ],
     horizontal=True
 )
 
-if mode == "🤖 AI Career Guidance Only":
+if mode == "🤖 AI Career Guidance":
 
     st.success(
-        "AI-only mode is active. You can generate Gemini career guidance without running the placement prediction model."
-    )
-
-
-# ============================================================
-# GEMINI API KEY
-# ============================================================
-
-st.subheader(
-    "🔑 Gemini AI"
-)
-
-api_key = st.text_input(
-    "Gemini API Key",
-    type="password",
-    value=st.session_state.get(
-        "gemini_api_key",
-        ""
-    ),
-    help="Your key is used only for the current Streamlit session."
-)
-
-if api_key:
-
-    st.session_state.gemini_api_key = (
-        api_key.strip()
-    )
-
-else:
-
-    st.caption(
-        "Gemini guidance requires a Gemini API key."
+        "AI Career Guidance mode is active. Gemini will provide personalized guidance using the student profile."
     )
 
 
@@ -2652,9 +2293,7 @@ for index, skill in enumerate(
 
     with skill_columns[index]:
 
-        domain_scores[
-            skill
-        ] = st.slider(
+        domain_scores[skill] = st.slider(
             skill,
             min_value=1,
             max_value=10,
@@ -2670,39 +2309,26 @@ for index, skill in enumerate(
 student = build_student_profile(
 
     gender=gender,
-
     age=age,
-
     ug_degree=ug_degree,
-
     ug_branch=ug_branch,
-
     ug_cgpa=ug_cgpa,
 
     has_pg=has_pg,
-
     pg_degree=pg_degree,
-
     pg_branch=pg_branch,
-
     pg_cgpa=pg_cgpa,
 
     backlogs=backlogs,
-
     internships=internships,
-
     projects=projects,
-
     certifications=certifications,
 
     coding_skills=coding_skills,
-
     communication_skills=communication_skills,
-
     aptitude_score=aptitude_score,
 
     career_interest=career_interest,
-
     target_career_goal=target_career_goal,
 
     domain_scores=domain_scores
@@ -2715,7 +2341,7 @@ student = build_student_profile(
 
 st.divider()
 
-if mode == "🤖 AI Career Guidance Only":
+if mode == "🤖 AI Career Guidance":
 
     generate_button = st.button(
         "🤖 Generate AI Career Guidance",
@@ -2726,23 +2352,25 @@ if mode == "🤖 AI Career Guidance Only":
 else:
 
     generate_button = st.button(
-        "🔮 Predict Placement Readiness",
+        "🔮 Predict Placement",
         use_container_width=True,
         type="primary"
     )
 
 
 # ============================================================
-# AI-ONLY MODE
+# AI CAREER GUIDANCE MODE
 # ============================================================
 
 if (
     generate_button
-    and mode == "🤖 AI Career Guidance Only"
+    and mode == "🤖 AI Career Guidance"
 ):
 
     st.session_state.student_profile = student
     st.session_state.ai_mode = "only"
+    st.session_state.prediction_result = None
+    st.session_state.ai_career_advice = None
 
     try:
 
@@ -2755,8 +2383,12 @@ if (
                 prediction_context=None
             )
 
-        st.session_state.ai_career_advice = (
-            advice
+        st.session_state.ai_career_advice = advice
+
+    except KeyError:
+
+        st.error(
+            "Gemini API key is missing. Please add GEMINI_API_KEY in Streamlit Secrets."
         )
 
     except Exception as e:
@@ -2767,12 +2399,12 @@ if (
 
 
 # ============================================================
-# PLACEMENT MODE
+# PLACEMENT PREDICTION MODE
 # ============================================================
 
 if (
     generate_button
-    and mode == "🔮 Placement Prediction + AI Guidance"
+    and mode == "🔮 Placement Prediction"
 ):
 
     st.session_state.student_profile = student
@@ -2789,9 +2421,7 @@ if (
                 student
             )
 
-        st.session_state.prediction_result = (
-            result
-        )
+        st.session_state.prediction_result = result
 
     except Exception as e:
 
@@ -2803,14 +2433,6 @@ if (
 
         st.code(
             str(e)
-        )
-
-        st.warning(
-            """
-The app now uses the fitted model's own feature_names_in_ when
-available, so category columns such as branch_AI, degree_BCA and
-gender_Female are not blindly sent to the model.
-"""
         )
 
 
@@ -2831,9 +2453,7 @@ if (
         "🎯 Placement Prediction Result"
     )
 
-    probability = result[
-        "probability"
-    ]
+    probability = result["probability"]
 
     prediction_text = result[
         "prediction_text"
@@ -2860,7 +2480,6 @@ if (
                 None
             )
         )
-
 
     col1, col2, col3 = st.columns(3)
 
@@ -2896,16 +2515,14 @@ if (
 
 
     # ========================================================
-    # PROFILE STRENGTHS
+    # STRENGTHS
     # ========================================================
 
     st.subheader(
         "💪 Your Strengths"
     )
 
-    for strength in result[
-        "strengths"
-    ]:
+    for strength in result["strengths"]:
 
         st.success(
             strength
@@ -2913,16 +2530,14 @@ if (
 
 
     # ========================================================
-    # SKILL GAPS
+    # GAPS
     # ========================================================
 
     st.subheader(
         "📈 Areas to Improve"
     )
 
-    gaps = result[
-        "gaps"
-    ]
+    gaps = result["gaps"]
 
     if gaps:
 
@@ -2970,7 +2585,7 @@ if (
 
 
     # ========================================================
-    # MODEL INPUT STATUS
+    # MODEL COMPATIBILITY
     # ========================================================
 
     with st.expander(
@@ -2987,15 +2602,13 @@ if (
             st.write(
                 "Number of features sent to the model:",
                 len(
-                    result[
-                        "model_features"
-                    ]
+                    result["model_features"]
                 )
             )
 
 
     # ========================================================
-    # AI GUIDANCE AFTER PREDICTION
+    # GEMINI AFTER PREDICTION
     # ========================================================
 
     st.divider()
@@ -3005,7 +2618,7 @@ if (
     )
 
     st.write(
-        "Gemini can now interpret your placement result together with your academic branch, career interest, skills and goals."
+        "Gemini can interpret your placement result together with your academic branch, career interest, skills and goals."
     )
 
     ai_button = st.button(
@@ -3048,8 +2661,12 @@ The model did not provide a probability score.
                     prediction_context
                 )
 
-            st.session_state.ai_career_advice = (
-                advice
+            st.session_state.ai_career_advice = advice
+
+        except KeyError:
+
+            st.error(
+                "Gemini API key is missing. Please add GEMINI_API_KEY in Streamlit Secrets."
             )
 
         except Exception as e:
@@ -3060,7 +2677,7 @@ The model did not provide a probability score.
 
 
 # ============================================================
-# DISPLAY AI-ONLY OR POST-PREDICTION GUIDANCE
+# DISPLAY AI GUIDANCE
 # ============================================================
 
 if st.session_state.ai_career_advice:

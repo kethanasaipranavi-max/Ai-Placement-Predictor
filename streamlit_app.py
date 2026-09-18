@@ -864,7 +864,7 @@ def generate_with_groq(prompt):
             },
         ],
         "temperature": 0.4,
-        "max_tokens": 5000,
+        "max_tokens": 3000,
     }
 
     data = json.dumps(
@@ -919,52 +919,34 @@ def generate_ai_guidance(
     student,
     prediction_context=None,
 ):
-    prompt = build_ai_prompt(
-        student,
-        prediction_context,
-    )
-
+    """Groq primary; Gemini fallback."""
+    prompt = build_ai_prompt(student, prediction_context)
     errors = []
 
-    # 1. Gemini first
-    if get_secret("GEMINI_API_KEY"):
-
-        try:
-            return (
-                generate_with_gemini(prompt),
-                "Gemini",
-            )
-
-        except Exception as exc:
-            errors.append(
-                f"Gemini: {exc}"
-            )
-
-    # 2. Groq fallback
+    # 1. GROQ PRIMARY
     if get_secret("GROQ_API_KEY"):
-
         try:
-            return (
-                generate_with_groq(prompt),
-                "Groq",
-            )
-
+            return generate_with_groq(prompt), "Groq"
         except Exception as exc:
-            errors.append(
-                f"Groq: {exc}"
-            )
+            errors.append(f"Groq: {exc}")
+
+    # 2. GEMINI FALLBACK
+    if get_secret("GEMINI_API_KEY"):
+        try:
+            return generate_with_gemini(prompt), "Gemini"
+        except Exception as exc:
+            errors.append(f"Gemini: {exc}")
 
     if errors:
         raise RuntimeError(
-            " | ".join(errors)
+            "Both AI services are currently unavailable. "
+            "Groq is the primary provider and Gemini is the fallback. "
+            "Please try again later when the provider limits reset."
         )
 
     raise RuntimeError(
-        "No AI API key is configured. "
-        "Add GEMINI_API_KEY and/or GROQ_API_KEY "
-        "to Streamlit Secrets."
+        "No AI API key is configured. Add GROQ_API_KEY and/or GEMINI_API_KEY to Streamlit Secrets."
     )
-
 
 def build_student_profile(
     gender,

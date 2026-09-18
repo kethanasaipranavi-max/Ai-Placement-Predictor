@@ -1,4 +1,5 @@
 import os
+import re
 import joblib
 import numpy as np
 import pandas as pd
@@ -6,7 +7,7 @@ import streamlit as st
 
 
 # ============================================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # ============================================================
 
 st.set_page_config(
@@ -17,7 +18,33 @@ st.set_page_config(
 
 
 # ============================================================
-# BRANCH-SPECIFIC SKILLS
+# FILE NAMES
+# ============================================================
+
+MODEL_FILE = "placement_prediction_final.pkl"
+FEATURE_FILE = "placement_feature_names_final.pkl"
+RULE_FILE = "recommendation_rules.pkl"
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+if "prediction_result" not in st.session_state:
+    st.session_state.prediction_result = None
+
+if "student_profile" not in st.session_state:
+    st.session_state.student_profile = None
+
+if "ai_career_advice" not in st.session_state:
+    st.session_state.ai_career_advice = None
+
+if "ai_mode" not in st.session_state:
+    st.session_state.ai_mode = None
+
+
+# ============================================================
+# BRANCH SKILLS
 # ============================================================
 
 def get_branch_skills(branch):
@@ -467,9 +494,7 @@ def get_career_interests(branch):
         "Mechanical Engineering",
         "Automobile Engineering",
         "Production Engineering",
-        "Industrial Engineering",
-        "Aeronautical Engineering",
-        "Aerospace Engineering"
+        "Industrial Engineering"
     ]:
         return [
             "Design Engineering",
@@ -477,7 +502,6 @@ def get_career_interests(branch):
             "Automotive Engineering",
             "Production Engineering",
             "Operations",
-            "Aerospace / Aeronautical",
             "Other"
         ]
 
@@ -594,315 +618,279 @@ def get_career_interests(branch):
 
 
 # ============================================================
-# BRANCH OPTIONS
-# ============================================================
-
-BRANCH_OPTIONS = [
-
-    "Computer Science",
-    "Information Technology",
-    "Data Science",
-    "Artificial Intelligence",
-    "Machine Learning",
-    "Cyber Security",
-    "Software Engineering",
-    "Computer Applications",
-
-    "Mechanical Engineering",
-    "Automobile Engineering",
-    "Production Engineering",
-    "Industrial Engineering",
-    "Aeronautical Engineering",
-    "Aerospace Engineering",
-
-    "Electrical Engineering",
-    "Electronics Engineering",
-    "Electronics and Communication Engineering",
-    "Biomedical Engineering",
-
-    "Civil Engineering",
-    "Chemical Engineering",
-
-    "Mathematics",
-    "Statistics",
-    "Physics",
-    "Chemistry",
-    "Environmental Science",
-
-    "Biotechnology",
-    "Microbiology",
-    "Biochemistry",
-    "Biological Sciences",
-    "Life Sciences",
-    "Genetics",
-    "Botany",
-    "Zoology",
-
-    "Food Science and Nutrition",
-    "Food Technology",
-    "Nutrition and Dietetics",
-
-    "Economics",
-    "Commerce",
-    "Business Administration",
-    "Finance",
-    "Accounting",
-    "Management",
-    "Marketing",
-    "Human Resources",
-
-    "Psychology",
-    "English",
-    "Political Science",
-    "Sociology",
-    "History",
-    "Public Administration",
-
-    "Other"
-]
-
-
-# ============================================================
-# DEGREE OPTIONS
-# ============================================================
-
-UG_DEGREES = [
-    "BE",
-    "BTech",
-    "BSc",
-    "BCA",
-    "BBA",
-    "BCom",
-    "BA",
-    "Other"
-]
-
-PG_DEGREES = [
-    "MTech",
-    "ME",
-    "MSc",
-    "MCA",
-    "MBA",
-    "MCom",
-    "MA",
-    "Other"
-]
-
-
-# ============================================================
 # MODEL BRANCH MAPPING
 # ============================================================
 
 def map_branch_for_model(branch):
 
-    computer_branches = [
+    """
+    The placement model was trained using grouped branch categories.
+    We keep the original student branch separately for Gemini guidance.
+    """
+
+    if branch in [
         "Computer Science",
         "Information Technology",
+        "Computer Applications",
+        "Software Engineering",
         "Data Science",
         "Artificial Intelligence",
         "Machine Learning",
-        "Cyber Security",
-        "Software Engineering",
-        "Computer Applications"
-    ]
+        "Cyber Security"
+    ]:
+        return "CS"
 
-    electrical_branches = [
-        "Electrical Engineering",
-        "Electronics Engineering",
-        "Electronics and Communication Engineering",
-        "Biomedical Engineering"
-    ]
-
-    mechanical_branches = [
+    if branch in [
         "Mechanical Engineering",
         "Automobile Engineering",
         "Production Engineering",
         "Industrial Engineering",
         "Aeronautical Engineering",
         "Aerospace Engineering"
-    ]
+    ]:
+        return "Mechanical"
 
-    if branch in computer_branches:
-        return "CS"
-
-    if branch in electrical_branches:
+    if branch in [
+        "Electrical Engineering",
+        "Electronics Engineering",
+        "Electronics and Communication Engineering",
+        "Biomedical Engineering"
+    ]:
         return "Electrical"
 
-    if branch in mechanical_branches:
-        return "Mechanical"
+    if branch in [
+        "Civil Engineering"
+    ]:
+        return "Civil"
 
-    if branch == "Civil Engineering":
-        return "Mechanical"
+    if branch in [
+        "Chemical Engineering"
+    ]:
+        return "Chemical"
 
-    return "DS"
+    return "Other"
 
 
 # ============================================================
-# MODEL COMPATIBILITY HELPERS
+# DEGREE MAPPING HELPERS
 # ============================================================
 
-def normalize_degree_for_model(degree, feature_columns):
+def degree_aliases(degree):
 
-    possible_values = set()
+    aliases = {
+        "BE": [
+            "BE",
+            "B.E",
+            "B.E.",
+            "Bachelor of Engineering"
+        ],
 
-    for column in feature_columns:
+        "BTech": [
+            "BTech",
+            "B.Tech",
+            "B.Tech.",
+            "Bachelor of Technology"
+        ],
 
-        if column.startswith("degree_"):
+        "BSc": [
+            "BSc",
+            "B.Sc",
+            "B.Sc.",
+            "Bachelor of Science"
+        ],
 
-            possible_values.add(
-                column.replace("degree_", "", 1)
-            )
+        "BCA": [
+            "BCA",
+            "Bachelor of Computer Applications"
+        ],
 
-    if not possible_values:
-        return degree
+        "BBA": [
+            "BBA",
+            "Bachelor of Business Administration"
+        ],
 
-    if degree in possible_values:
-        return degree
+        "BCom": [
+            "BCom",
+            "B.Com",
+            "B.Com.",
+            "Bachelor of Commerce"
+        ],
 
-    degree_aliases = {
-
-        "BTech": ["BTech", "BE", "B.E", "B.E.", "Bachelor of Engineering"],
-        "BE": ["BE", "BTech", "B.E", "B.E.", "Bachelor of Engineering"],
-        "BSc": ["BSc", "B.Sc", "B.Sc.", "Bachelor of Science"],
-        "BCA": ["BCA", "Bachelor of Computer Applications"],
-        "BBA": ["BBA", "Bachelor of Business Administration"],
-        "BCom": ["BCom", "B.Com", "B.Com.", "Bachelor of Commerce"],
-        "BA": ["BA", "B.A", "B.A.", "Bachelor of Arts"]
+        "BA": [
+            "BA",
+            "B.A",
+            "B.A.",
+            "Bachelor of Arts"
+        ]
     }
 
-    candidates = degree_aliases.get(
-        degree,
-        [degree]
-    )
-
-    for candidate in candidates:
-
-        if candidate in possible_values:
-            return candidate
-
-    return degree
-
-
-def normalize_gender_for_model(gender, feature_columns):
-
-    possible_values = set()
-
-    for column in feature_columns:
-
-        if column.startswith("gender_"):
-
-            possible_values.add(
-                column.replace("gender_", "", 1)
-            )
-
-    if gender in possible_values:
-        return gender
-
-    gender_aliases = {
-        "Male": ["Male", "M", "male", "m"],
-        "Female": ["Female", "F", "female", "f"]
-    }
-
-    for candidate in gender_aliases.get(
-        gender,
-        [gender]
-    ):
-
-        if candidate in possible_values:
-            return candidate
-
-    return gender
+    return aliases.get(degree, [degree])
 
 
 # ============================================================
-# LOAD MODEL
+# LOAD MODEL ONLY WHEN NEEDED
 # ============================================================
 
 @st.cache_resource
 def load_components():
 
-    model = joblib.load(
-        "placement_prediction_final.pkl"
-    )
+    model = joblib.load(MODEL_FILE)
 
-    feature_names = joblib.load(
-        "placement_feature_names_final.pkl"
-    )
+    feature_names = joblib.load(FEATURE_FILE)
+
+    if isinstance(feature_names, pd.DataFrame):
+        feature_names = feature_names.columns.tolist()
+
+    elif isinstance(feature_names, pd.Series):
+        feature_names = feature_names.tolist()
+
+    elif isinstance(feature_names, np.ndarray):
+        feature_names = feature_names.tolist()
+
+    elif isinstance(feature_names, dict):
+        if "feature_names" in feature_names:
+            feature_names = feature_names["feature_names"]
+        elif "features" in feature_names:
+            feature_names = feature_names["features"]
+        else:
+            feature_names = list(feature_names.keys())
+
+    feature_names = [
+        str(x)
+        for x in feature_names
+    ]
 
     recommendation_rules = {}
 
-    if os.path.exists("recommendation_rules.pkl"):
+    if os.path.exists(RULE_FILE):
 
         try:
-
             recommendation_rules = joblib.load(
-                "recommendation_rules.pkl"
+                RULE_FILE
             )
-
         except Exception:
-
             recommendation_rules = {}
 
     return (
         model,
-        list(feature_names),
-        recommendation_rules
-    )
-
-
-try:
-
-    (
-        model,
         feature_names,
         recommendation_rules
-    ) = load_components()
-
-except Exception as e:
-
-    st.error(
-        "Unable to load the placement prediction model."
     )
-
-    st.code(
-        str(e)
-    )
-
-    st.stop()
 
 
 # ============================================================
-# FEATURE PREPARATION
+# MODEL FEATURE DISCOVERY
 # ============================================================
 
-def prepare_student_data(
-    student,
-    feature_columns
-):
+RAW_FEATURE_NAMES = {
+    "gender",
+    "age",
+    "degree",
+    "branch",
+    "cgpa",
+    "backlogs",
+    "internships",
+    "certifications",
+    "coding_skills",
+    "communication_skills",
+    "aptitude_score",
+    "projects",
+    "cgpa_category"
+}
 
-    model_degree = normalize_degree_for_model(
-        student["degree"],
-        feature_columns
+
+def get_object_feature_names(obj):
+
+    names = getattr(
+        obj,
+        "feature_names_in_",
+        None
     )
 
-    model_gender = normalize_gender_for_model(
-        student["gender"],
-        feature_columns
+    if names is not None:
+
+        try:
+            return [
+                str(x)
+                for x in names
+            ]
+        except Exception:
+            pass
+
+    return None
+
+
+def get_model_expected_features(model):
+
+    """
+    Find the actual columns used when the fitted estimator was trained.
+
+    This is critical because the feature pickle can contain columns that
+    are not necessarily the exact columns accepted by the fitted model.
+    """
+
+    # 1. Direct estimator
+    names = get_object_feature_names(model)
+
+    if names:
+        return names
+
+    # 2. Pipeline / imblearn Pipeline
+    named_steps = getattr(
+        model,
+        "named_steps",
+        None
     )
 
-    model_branch = student["branch"]
+    if named_steps:
 
-    df = pd.DataFrame([{
+        for _, step in named_steps.items():
 
-        "gender": model_gender,
+            names = get_object_feature_names(step)
+
+            if names:
+                return names
+
+    # 3. Generic pipeline steps
+    steps = getattr(
+        model,
+        "steps",
+        None
+    )
+
+    if steps:
+
+        for _, step in steps:
+
+            names = get_object_feature_names(step)
+
+            if names:
+                return names
+
+    return None
+
+
+# ============================================================
+# RAW STUDENT DATA
+# ============================================================
+
+def build_raw_model_dataframe(student):
+
+    model_branch = map_branch_for_model(
+        student["ug_branch"]
+    )
+
+    raw = {
+
+        "gender": student["gender"],
 
         "age": student["age"],
 
-        "degree": model_degree,
+        "degree": student["ug_degree"],
 
         "branch": model_branch,
 
-        "cgpa": student["cgpa"],
+        "cgpa": student["ug_cgpa"],
 
         "backlogs": student["backlogs"],
 
@@ -912,124 +900,425 @@ def prepare_student_data(
 
         "coding_skills": student["coding_skills"],
 
-        "communication_skills": student["communication_skills"],
+        "communication_skills": (
+            student["communication_skills"]
+        ),
 
-        "aptitude_score": student["aptitude_score"],
+        "aptitude_score": (
+            student["aptitude_score"]
+        ),
 
         "projects": student["projects"]
+    }
 
-    }])
-
-    def get_cgpa_category(cgpa):
-
-        if cgpa < 6:
-            return "Low"
-
-        elif cgpa < 7.5:
-            return "Good"
-
-        return "Excellent"
+    df = pd.DataFrame([raw])
 
     df["cgpa_category"] = df["cgpa"].apply(
         get_cgpa_category
     )
 
-    categorical_columns = [
-        "gender",
-        "degree",
-        "branch",
-        "cgpa_category"
-    ]
-
-    df = pd.get_dummies(
-        df,
-        columns=categorical_columns,
-        dtype=int
-    )
-
-    for column in feature_columns:
-
-        if column not in df.columns:
-
-            df[column] = 0
-
-    df = df[
-        feature_columns
-    ]
-
     return df
 
 
 # ============================================================
-# PREDICTION
+# CGPA CATEGORY
 # ============================================================
 
-def predict_placement(student):
+def get_cgpa_category(cgpa):
 
-    processed = prepare_student_data(
-        student,
-        feature_names
+    if cgpa < 6:
+        return "Low"
+
+    if cgpa < 7.5:
+        return "Good"
+
+    return "Excellent"
+
+
+# ============================================================
+# BUILD ENCODED DATAFRAME
+# ============================================================
+
+def build_encoded_candidates(student):
+
+    model_branch = map_branch_for_model(
+        student["ug_branch"]
     )
 
-    prediction = int(
-        model.predict(processed)[0]
+    raw = {
+
+        "gender": student["gender"],
+
+        "age": student["age"],
+
+        "degree": student["ug_degree"],
+
+        "branch": model_branch,
+
+        "cgpa": student["ug_cgpa"],
+
+        "backlogs": student["backlogs"],
+
+        "internships": student["internships"],
+
+        "certifications": student["certifications"],
+
+        "coding_skills": student["coding_skills"],
+
+        "communication_skills": (
+            student["communication_skills"]
+        ),
+
+        "aptitude_score": (
+            student["aptitude_score"]
+        ),
+
+        "projects": student["projects"]
+    }
+
+    base_df = pd.DataFrame([raw])
+
+    base_df["cgpa_category"] = (
+        base_df["cgpa"].apply(
+            get_cgpa_category
+        )
     )
 
-    try:
+    candidates = []
 
-        probabilities = model.predict_proba(
-            processed
-        )[0]
+    # --------------------------------------------------------
+    # Candidate 1: normal grouped branch
+    # --------------------------------------------------------
 
-        if len(probabilities) >= 2:
+    candidate = pd.get_dummies(
+        base_df.copy(),
+        columns=[
+            "gender",
+            "degree",
+            "branch",
+            "cgpa_category"
+        ],
+        dtype=int
+    )
 
-            probability = float(
-                probabilities[1]
-            )
+    candidates.append(candidate)
 
-        else:
+    # --------------------------------------------------------
+    # Candidate 2: long original branch
+    # --------------------------------------------------------
 
-            probability = float(
-                probabilities[0]
-            )
+    original_df = base_df.copy()
 
-    except Exception:
+    original_df["branch"] = student[
+        "ug_branch"
+    ]
 
-        probability = float(
-            prediction
+    original_encoded = pd.get_dummies(
+        original_df,
+        columns=[
+            "gender",
+            "degree",
+            "branch",
+            "cgpa_category"
+        ],
+        dtype=int
+    )
+
+    candidates.append(
+        original_encoded
+    )
+
+    # --------------------------------------------------------
+    # Candidate 3: common abbreviated branch names
+    # --------------------------------------------------------
+
+    abbreviated = base_df.copy()
+
+    abbreviation = {
+        "Computer Science": "CS",
+        "Information Technology": "IT",
+        "Data Science": "DS",
+        "Artificial Intelligence": "AI",
+        "Machine Learning": "ML",
+        "Cyber Security": "Cyber Security",
+        "Software Engineering": "Software Engineering",
+        "Computer Applications": "BCA",
+        "Mechanical Engineering": "Mechanical",
+        "Automobile Engineering": "Automobile",
+        "Production Engineering": "Production",
+        "Industrial Engineering": "Industrial",
+        "Electrical Engineering": "Electrical",
+        "Electronics Engineering": "Electronics",
+        "Electronics and Communication Engineering": "ECE",
+        "Biomedical Engineering": "Biomedical",
+        "Civil Engineering": "Civil",
+        "Chemical Engineering": "Chemical"
+    }
+
+    abbreviated["branch"] = abbreviation.get(
+        student["ug_branch"],
+        student["ug_branch"]
+    )
+
+    abbreviated_encoded = pd.get_dummies(
+        abbreviated,
+        columns=[
+            "gender",
+            "degree",
+            "branch",
+            "cgpa_category"
+        ],
+        dtype=int
+    )
+
+    candidates.append(
+        abbreviated_encoded
+    )
+
+    return candidates
+
+
+# ============================================================
+# ALIGN ENCODED DATA TO MODEL FEATURES
+# ============================================================
+
+def align_encoded_dataframe(
+    encoded_df,
+    expected_features
+):
+
+    aligned = pd.DataFrame(
+        0,
+        index=[0],
+        columns=expected_features,
+        dtype=float
+    )
+
+    for column in encoded_df.columns:
+
+        column_name = str(column)
+
+        if column_name in aligned.columns:
+
+            aligned.loc[
+                0,
+                column_name
+            ] = encoded_df.iloc[0][column]
+
+    return aligned
+
+
+# ============================================================
+# INTELLIGENT MODEL INPUT
+# ============================================================
+
+def prepare_model_input(
+    model,
+    student,
+    artifact_features
+):
+
+    raw_df = build_raw_model_dataframe(
+        student
+    )
+
+    expected_features = (
+        get_model_expected_features(
+            model
+        )
+    )
+
+    # --------------------------------------------------------
+    # CASE 1
+    # Model explicitly exposes raw training columns
+    # --------------------------------------------------------
+
+    if expected_features:
+
+        expected_set = set(
+            expected_features
         )
 
-    return (
-        prediction,
-        probability,
-        processed
+        raw_overlap = (
+            expected_set.intersection(
+                RAW_FEATURE_NAMES
+            )
+        )
+
+        # If model expects raw columns such as degree/branch/gender,
+        # send raw dataframe exactly in that order.
+        if len(raw_overlap) >= 3:
+
+            missing = [
+                col
+                for col in expected_features
+                if col not in raw_df.columns
+            ]
+
+            if not missing:
+
+                return raw_df[
+                    expected_features
+                ], "raw"
+
+    # --------------------------------------------------------
+    # CASE 2
+    # Model expects encoded features
+    # --------------------------------------------------------
+
+    candidates = build_encoded_candidates(
+        student
+    )
+
+    if expected_features:
+
+        best_candidate = None
+        best_overlap = -1
+
+        expected_set = set(
+            expected_features
+        )
+
+        for candidate in candidates:
+
+            overlap = len(
+                set(candidate.columns)
+                .intersection(
+                    expected_set
+                )
+            )
+
+            if overlap > best_overlap:
+
+                best_overlap = overlap
+                best_candidate = candidate
+
+        if best_candidate is not None:
+
+            aligned = align_encoded_dataframe(
+                best_candidate,
+                expected_features
+            )
+
+            return aligned, "encoded_model_features"
+
+    # --------------------------------------------------------
+    # CASE 3
+    # Fall back to artifact feature names
+    # --------------------------------------------------------
+
+    for candidate in candidates:
+
+        aligned = align_encoded_dataframe(
+            candidate,
+            artifact_features
+        )
+
+        return aligned, "encoded_artifact_features"
+
+    raise ValueError(
+        "Unable to construct model input."
     )
 
 
 # ============================================================
-# RELIABILITY
+# PROBABILITY EXTRACTION
 # ============================================================
 
-def get_reliability(probability):
+def get_positive_probability(
+    model,
+    model_input,
+    prediction
+):
 
-    distance = abs(
-        probability - 0.5
-    ) * 2
+    if not hasattr(
+        model,
+        "predict_proba"
+    ):
 
-    if distance >= 0.70:
-        return "High"
+        return None
 
-    elif distance >= 0.40:
-        return "Moderate"
+    probabilities = model.predict_proba(
+        model_input
+    )
 
-    return "Low"
+    probabilities = np.asarray(
+        probabilities
+    )
+
+    if probabilities.ndim != 2:
+
+        return None
+
+    row = probabilities[0]
+
+    classes = getattr(
+        model,
+        "classes_",
+        None
+    )
+
+    if classes is not None:
+
+        classes = list(classes)
+
+        # Prefer class 1 when present.
+        if 1 in classes:
+
+            index = classes.index(1)
+
+            return float(
+                row[index]
+            )
+
+        # Sometimes labels are strings.
+        for target in [
+            "1",
+            "Placed",
+            "PLACED",
+            "Yes",
+            "YES",
+            True
+        ]:
+
+            if target in classes:
+
+                index = classes.index(
+                    target
+                )
+
+                return float(
+                    row[index]
+                )
+
+    # Binary classifier fallback.
+    if len(row) == 2:
+
+        return float(row[1])
+
+    # If there is only one probability,
+    # use it according to prediction.
+    if len(row) == 1:
+
+        value = float(row[0])
+
+        return value
+
+    return None
 
 
 # ============================================================
 # READINESS
 # ============================================================
 
-def get_readiness(probability):
+def get_readiness_level(probability):
+
+    if probability is None:
+
+        return (
+            "Prediction available",
+            "🔵"
+        )
 
     if probability >= 0.75:
 
@@ -1038,7 +1327,7 @@ def get_readiness(probability):
             "🟢"
         )
 
-    elif probability >= 0.50:
+    if probability >= 0.50:
 
         return (
             "Moderate Placement Readiness",
@@ -1052,374 +1341,473 @@ def get_readiness(probability):
 
 
 # ============================================================
-# SKILL GAP ANALYSIS
+# PROFILE STRENGTHS
 # ============================================================
 
-def analyze_skill_gaps(branch_skills):
+def get_profile_strengths(student):
 
-    critical = []
-    development = []
     strengths = []
 
-    for skill, score in branch_skills.items():
+    if student["ug_cgpa"] >= 8:
+        strengths.append(
+            f"Strong academic performance with a CGPA of {student['ug_cgpa']:.2f}."
+        )
 
-        if score <= 3:
+    if student["backlogs"] == 0:
+        strengths.append(
+            "No current academic backlogs."
+        )
 
-            critical.append({
-                "skill": skill,
-                "score": score
-            })
+    if student["internships"] >= 1:
+        strengths.append(
+            f"{student['internships']} internship(s) provide practical exposure."
+        )
 
-        elif score <= 6:
+    if student["projects"] >= 2:
+        strengths.append(
+            f"{student['projects']} projects demonstrate practical experience."
+        )
 
-            development.append({
-                "skill": skill,
-                "score": score
-            })
+    if student["certifications"] >= 2:
+        strengths.append(
+            f"{student['certifications']} certifications show continued learning."
+        )
 
-        else:
+    if student["coding_skills"] >= 7:
+        strengths.append(
+            "Good programming/computational skill level."
+        )
 
-            strengths.append({
-                "skill": skill,
-                "score": score
-            })
+    if student["communication_skills"] >= 7:
+        strengths.append(
+            "Good communication skill level."
+        )
 
-    return {
-        "critical_gaps": critical,
-        "development_needed": development,
-        "strengths": strengths
-    }
+    if student["aptitude_score"] >= 75:
+        strengths.append(
+            "Strong aptitude performance."
+        )
+
+    if not strengths:
+
+        strengths.append(
+            "The profile provides a foundation that can be strengthened through focused preparation."
+        )
+
+    return strengths
 
 
 # ============================================================
-# RULE-BASED RECOMMENDATIONS
+# PROFILE DEVELOPMENT AREAS
 # ============================================================
 
-def generate_recommendations(student):
+def get_profile_gaps(student):
 
-    recommendations = []
+    gaps = []
 
-    if student["cgpa"] < 7:
+    if student["ug_cgpa"] < 7:
 
-        recommendations.append(
-            "Work on improving academic performance and maintaining a stronger CGPA."
+        gaps.append(
+            "Academic performance"
         )
 
     if student["backlogs"] > 0:
 
-        recommendations.append(
-            "Clear pending backlogs and maintain a clean academic record."
+        gaps.append(
+            "Backlog clearance"
         )
 
     if student["internships"] == 0:
 
-        recommendations.append(
-            "Gain practical exposure through internships, industry projects, or field training."
+        gaps.append(
+            "Industry/internship exposure"
         )
 
     if student["projects"] < 2:
 
-        recommendations.append(
-            "Build at least two practical projects related to your academic field and career goal."
+        gaps.append(
+            "Practical project experience"
         )
 
     if student["certifications"] == 0:
 
-        recommendations.append(
-            "Complete relevant certifications that support your chosen career direction."
+        gaps.append(
+            "Relevant certifications"
         )
 
-    if student["aptitude_score"] < 60:
+    if student["coding_skills"] < 6:
 
-        recommendations.append(
-            "Practice quantitative aptitude, logical reasoning, and problem-solving regularly."
+        gaps.append(
+            "Technical/computational skills"
         )
 
     if student["communication_skills"] < 6:
 
-        recommendations.append(
-            "Improve communication, presentation, group discussion, and interview skills."
+        gaps.append(
+            "Communication and interview skills"
         )
 
-    if student["coding_skills"] < 5:
+    if student["aptitude_score"] < 60:
 
-        if student["ug_branch"] in [
-            "Computer Science",
-            "Information Technology",
-            "Data Science",
-            "Artificial Intelligence",
-            "Machine Learning",
-            "Cyber Security",
-            "Software Engineering",
-            "Computer Applications"
-        ]:
-
-            recommendations.append(
-                "Develop stronger programming and computational skills relevant to your career direction."
-            )
-
-    if not recommendations:
-
-        recommendations.append(
-            "Continue strengthening practical experience, advanced skills, projects, and interview preparation."
+        gaps.append(
+            "Aptitude preparation"
         )
 
-    return recommendations
+    return gaps
 
 
 # ============================================================
-# GEMINI TEXT EXTRACTION
+# RECOMMENDATIONS
+# ============================================================
+
+def generate_recommendations(
+    student,
+    recommendation_rules
+):
+
+    recommendations = []
+
+    gaps = get_profile_gaps(
+        student
+    )
+
+    for gap in gaps:
+
+        rule_key = None
+
+        if gap == "Technical/computational skills":
+            rule_key = "coding_skills"
+
+        elif gap == "Communication and interview skills":
+            rule_key = "communication_skills"
+
+        elif gap == "Aptitude preparation":
+            rule_key = "aptitude_score"
+
+        elif gap == "Academic performance":
+            rule_key = "cgpa"
+
+        elif gap == "Backlog clearance":
+            rule_key = "backlogs"
+
+        elif gap == "Industry/internship exposure":
+            rule_key = "internships"
+
+        elif gap == "Practical project experience":
+            rule_key = "projects"
+
+        elif gap == "Relevant certifications":
+            rule_key = "certifications"
+
+        if (
+            rule_key
+            and isinstance(
+                recommendation_rules,
+                dict
+            )
+            and rule_key in recommendation_rules
+        ):
+
+            rule = recommendation_rules[
+                rule_key
+            ]
+
+            if isinstance(rule, dict):
+
+                message = rule.get(
+                    "message"
+                )
+
+                if message:
+                    recommendations.append(
+                        message
+                    )
+
+    # Always provide useful fallback recommendations.
+    fallback_map = {
+
+        "Technical/computational skills":
+            "Strengthen the technical skills most relevant to your branch and target career.",
+
+        "Communication and interview skills":
+            "Practice structured answers, presentations, group discussions and mock interviews.",
+
+        "Aptitude preparation":
+            "Practice quantitative aptitude, logical reasoning and verbal reasoning regularly.",
+
+        "Academic performance":
+            "Focus on improving current academic performance and maintaining a consistent CGPA.",
+
+        "Backlog clearance":
+            "Prioritize clearing academic backlogs because they can affect eligibility for some opportunities.",
+
+        "Industry/internship exposure":
+            "Seek a relevant internship, industry project, research project or supervised practical experience.",
+
+        "Practical project experience":
+            "Build branch-specific projects that demonstrate practical application of your knowledge.",
+
+        "Relevant certifications":
+            "Consider certifications that directly support your chosen career direction."
+    }
+
+    for gap in gaps:
+
+        fallback = fallback_map.get(
+            gap
+        )
+
+        if (
+            fallback
+            and fallback not in recommendations
+        ):
+
+            recommendations.append(
+                fallback
+            )
+
+    return recommendations[:5]
+
+
+# ============================================================
+# GEMINI
+# ============================================================
+
+def get_gemini_client(api_key):
+
+    from google import genai
+
+    return genai.Client(
+        api_key=api_key.strip()
+    )
+
+
+# ============================================================
+# GEMINI RESPONSE EXTRACTION
 # ============================================================
 
 def extract_gemini_text(interaction):
 
-    try:
-
-        text = getattr(
-            interaction,
-            "output_text",
-            None
-        )
-
-        if text:
-
-            return str(text)
-
-    except Exception:
-        pass
-
-    try:
-
-        output = getattr(
-            interaction,
-            "output",
-            None
-        )
-
-        if output:
-
-            collected = []
-
-            for item in output:
-
-                text = getattr(
-                    item,
-                    "text",
-                    None
-                )
-
-                if text:
-
-                    collected.append(
-                        str(text)
-                    )
-
-                else:
-
-                    content = getattr(
-                        item,
-                        "content",
-                        None
-                    )
-
-                    if content:
-
-                        for content_item in content:
-
-                            content_text = getattr(
-                                content_item,
-                                "text",
-                                None
-                            )
-
-                            if content_text:
-
-                                collected.append(
-                                    str(content_text)
-                                )
-
-            if collected:
-
-                return "\n".join(
-                    collected
-                )
-
-    except Exception:
-        pass
-
-    return None
-
-
-# ============================================================
-# GEMINI CAREER GUIDANCE
-# ============================================================
-
-def generate_gemini_guidance(
-    student,
-    skill_gaps,
-    prediction_result=None
-):
-
-    gemini_api_key = student.get(
-        "gemini_api_key",
-        ""
+    # google-genai Interactions API
+    text_value = getattr(
+        interaction,
+        "output_text",
+        None
     )
 
-    if not gemini_api_key.strip():
+    if text_value:
 
-        raise ValueError(
-            "Please enter your Gemini API key."
+        return str(
+            text_value
+        ).strip()
+
+    # Try output objects.
+    output = getattr(
+        interaction,
+        "output",
+        None
+    )
+
+    if output:
+
+        collected = []
+
+        if isinstance(
+            output,
+            list
+        ):
+
+            items = output
+
+        else:
+
+            items = [output]
+
+        for item in items:
+
+            item_text = getattr(
+                item,
+                "text",
+                None
+            )
+
+            if item_text:
+                collected.append(
+                    str(item_text)
+                )
+
+            content = getattr(
+                item,
+                "content",
+                None
+            )
+
+            if content:
+
+                if isinstance(
+                    content,
+                    list
+                ):
+
+                    for part in content:
+
+                        part_text = getattr(
+                            part,
+                            "text",
+                            None
+                        )
+
+                        if part_text:
+                            collected.append(
+                                str(part_text)
+                            )
+
+        if collected:
+
+            return "\n".join(
+                collected
+            ).strip()
+
+    return ""
+
+
+# ============================================================
+# GEMINI PROMPT
+# ============================================================
+
+def build_gemini_prompt(
+    student,
+    prediction_context=None
+):
+
+    branch = student[
+        "ug_branch"
+    ]
+
+    branch_skills = get_branch_skills(
+        branch
+    )
+
+    branch_skill_lines = []
+
+    for skill in branch_skills:
+
+        score_key = f"skill_{skill}"
+
+        score = student.get(
+            score_key,
+            5
         )
 
-    try:
-
-        from google import genai
-
-    except ImportError:
-
-        raise ImportError(
-            "Google GenAI package is not installed. "
-            "Make sure google-genai is present in requirements.txt."
+        branch_skill_lines.append(
+            f"- {skill}: {score}/10"
         )
 
     branch_skills_text = "\n".join(
-        [
-            f"- {skill}: {score}/10"
-            for skill, score
-            in student["branch_skills"].items()
-        ]
+        branch_skill_lines
     )
 
-    critical_text = ", ".join(
-        [
-            item["skill"]
-            for item in skill_gaps["critical_gaps"]
-        ]
-    )
+    critical_gaps = []
 
-    development_text = ", ".join(
-        [
-            item["skill"]
-            for item in skill_gaps["development_needed"]
-        ]
-    )
+    for skill in branch_skills:
 
-    strengths_text = ", ".join(
-        [
-            item["skill"]
-            for item in skill_gaps["strengths"]
-        ]
-    )
+        score = student.get(
+            f"skill_{skill}",
+            5
+        )
 
-    recommendations = generate_recommendations(
-        student
-    )
+        if score <= 4:
 
-    recommendations_text = "\n".join(
-        [
-            f"- {item}"
-            for item in recommendations
-        ]
-    )
+            critical_gaps.append(
+                f"{skill} ({score}/10)"
+            )
 
-    if student["has_pg"]:
+    development = []
 
-        pg_information = f"""
-PG Degree:
-{student["pg_degree"]}
+    for skill in branch_skills:
 
-PG Specialization:
-{student["pg_branch"]}
+        score = student.get(
+            f"skill_{skill}",
+            5
+        )
 
-PG CGPA:
-{student["pg_cgpa"]}
-"""
+        if 5 <= score <= 6:
+
+            development.append(
+                f"{skill} ({score}/10)"
+            )
+
+    if critical_gaps:
+
+        critical_gap_text = "\n".join(
+            f"- {x}"
+            for x in critical_gaps
+        )
 
     else:
 
-        pg_information = (
-            "No postgraduate education provided."
+        critical_gap_text = (
+            "- No critical branch-skill gap based on the self-assessment."
         )
 
-    if prediction_result is not None:
+    if development:
 
-        prediction_label = (
-
-            "Likely Placed"
-
-            if prediction_result["prediction"] == 1
-
-            else
-
-            "Not Likely Placed"
+        development_text = "\n".join(
+            f"- {x}"
+            for x in development
         )
-
-        prediction_information = f"""
-Machine Learning Placement Prediction:
-{prediction_label}
-
-Estimated Placement Probability:
-{prediction_result["probability"] * 100:.2f}%
-
-Prediction Reliability:
-{prediction_result["reliability"]}
-
-Placement Readiness:
-{prediction_result["readiness"]}
-"""
 
     else:
 
-        prediction_information = """
-No machine-learning placement prediction was requested.
+        development_text = (
+            "- Continue strengthening the existing skill profile."
+        )
 
-Provide career guidance independently using the student's
-education, branch, skills and career direction.
-"""
+    if prediction_context:
 
-    prompt = f"""
-You are an expert career counselor, academic advisor,
-and placement preparation mentor.
+        prediction_text = prediction_context
 
-Provide highly personalized, realistic, practical and
-actionable career guidance for this student.
+    else:
 
-The student's ACTUAL academic branch is the PRIMARY
-academic context.
+        prediction_text = (
+            "Placement prediction was not requested. "
+            "Provide career guidance based on the student profile only."
+        )
 
-The student's Career Interest and Target Career Goal
-must strongly influence your recommendations.
+    return f"""
+You are an expert student career counselor and employability advisor.
 
-Do NOT automatically recommend Computer Science,
-programming, software development or coding to
-students from non-computing fields.
+Your task is to provide personalized, realistic and field-specific career guidance.
 
-For non-computing students, prioritize:
+IMPORTANT RULES:
 
-- Their actual academic domain
-- Domain-specific professional skills
-- Practical field skills
-- Industry tools
-- Laboratory methods where relevant
-- Analytical methods
-- Business tools where relevant
-- Communication and professional skills
-- Field-specific projects
-- Internships
-- Certifications
-- Interview preparation
-
-Never guarantee placement or employment.
-
-Do not mention resumes.
-
-Do not discuss internal model encoding.
-
-Do not discuss hypothetical what-if scenarios.
+1. The student's actual academic branch is the primary domain context.
+2. Career interest and target career goal should strongly influence recommendations.
+3. Consider both UG and PG education when available.
+4. Do NOT automatically assume the student is from Computer Science.
+5. Do NOT recommend software-development projects to non-software students unless their stated career goal specifically requires it.
+6. Project ideas must be appropriate for the student's actual academic field.
+7. Give EXACTLY 3 project ideas.
+8. Do not mention internal machine-learning encoding, feature names, SHAP internals, or implementation details.
+9. Do not mention resume analysis.
+10. Do not guarantee employment or placement.
+11. Do not invent achievements that are not in the profile.
+12. Identify realistic skill gaps.
+13. Make the guidance practical and actionable.
+14. Use the student's branch, skills, education, interests and target career goal together.
+15. If the target career is different from the academic branch, explain the bridge skills needed.
+16. For non-CS branches, keep the technical recommendations appropriate to that branch.
+17. The answer should be useful for a student preparing for internships, jobs or higher studies.
 
 ============================================================
-STUDENT EDUCATION
+STUDENT PROFILE
 ============================================================
+
+Age:
+{student["age"]}
+
+Gender:
+{student["gender"]}
 
 UG Degree:
 {student["ug_degree"]}
@@ -1428,9 +1816,28 @@ UG Branch:
 {student["ug_branch"]}
 
 UG CGPA:
-{student["cgpa"]}
+{student["ug_cgpa"]}
 
-{pg_information}
+Postgraduate Education:
+{
+    student["pg_degree"]
+    if student["has_pg"]
+    else "Not Applicable"
+}
+
+PG Specialization:
+{
+    student["pg_branch"]
+    if student["has_pg"]
+    else "Not Applicable"
+}
+
+PG CGPA:
+{
+    student["pg_cgpa"]
+    if student["has_pg"]
+    else "Not Applicable"
+}
 
 ============================================================
 CAREER DIRECTION
@@ -1440,222 +1847,161 @@ Career Interest:
 {student["career_interest"]}
 
 Target Career Goal:
-{student["target_career_goal"] or "Not specifically provided"}
+{
+    student["target_career_goal"]
+    if student["target_career_goal"]
+    else "Not specified"
+}
 
 ============================================================
-STUDENT PROFILE
+PLACEMENT PROFILE
 ============================================================
 
-Age:
-{student["age"]}
-
-Backlogs:
-{student["backlogs"]}
-
-Internships:
-{student["internships"]}
+{prediction_text}
 
 Projects:
 {student["projects"]}
 
+Internships:
+{student["internships"]}
+
 Certifications:
 {student["certifications"]}
 
-Aptitude Score:
-{student["aptitude_score"]}/100
+Backlogs:
+{student["backlogs"]}
+
+Coding / Computational Skills:
+{student["coding_skills"]}/10
 
 Communication Skills:
 {student["communication_skills"]}/10
 
-General Programming / Computational Skills:
-{student["coding_skills"]}/10
-
-Overall Domain Skill Score:
-{student["domain_skills"]}/10
+Aptitude Score:
+{student["aptitude_score"]}/100
 
 ============================================================
-BRANCH-SPECIFIC SKILLS
+ACTUAL BRANCH-SPECIFIC SKILLS
 ============================================================
+
+Academic Branch:
+{branch}
+
+Relevant branch skills:
 
 {branch_skills_text}
 
 ============================================================
-SKILL GAP ANALYSIS
+CRITICAL SKILL GAPS
 ============================================================
 
-Critical Skill Gaps:
-{critical_text or "None"}
-
-Skills Needing Development:
-{development_text or "None"}
-
-Current Strengths:
-{strengths_text or "None"}
+{critical_gap_text}
 
 ============================================================
-PLACEMENT INFORMATION
+SKILLS NEEDING DEVELOPMENT
 ============================================================
 
-{prediction_information}
+{development_text}
 
 ============================================================
-CURRENT IMPROVEMENT RECOMMENDATIONS
+REQUIRED RESPONSE
 ============================================================
 
-{recommendations_text}
+Use the following headings exactly:
 
-============================================================
-IMPORTANT RULES
-============================================================
+## 1. Overall Profile Assessment
 
-1. Use the student's actual academic branch as the
-   primary academic context.
+Assess the student's current academic, practical and career profile.
 
-2. Career Interest and Target Career Goal should strongly
-   influence the guidance.
+## 2. Career Direction
 
-3. Do not automatically recommend software development
-   or programming to non-computing students.
+Explain how the student's branch, career interest and target goal fit together.
 
-4. Recommend field-specific tools and professional skills.
+## 3. Recommended Career Paths
 
-5. Recommend projects that match the actual academic field.
+Give relevant career paths based on the actual branch and stated interests.
 
-6. Consider both UG and PG education when PG is available.
+## 4. Top Strengths
 
-7. Explain skill gaps clearly.
+Identify the strongest current advantages.
 
-8. Make the 30-day plan practical and measurable.
+## 5. Skill Gap Analysis
 
-9. Never guarantee placement or employment.
+Identify the most important gaps and explain why they matter for the target career.
 
-10. Give EXACTLY 3 project ideas.
+## 6. Areas to Improve
 
-11. The 3 projects must be genuinely relevant to the
-    student's academic branch and career direction.
+Give specific and practical improvement actions.
 
-12. Do not give generic projects when a field-specific
-    project is possible.
+## 7. 30-Day Improvement Plan
 
-============================================================
-REQUIRED OUTPUT FORMAT
-============================================================
+Create a Week 1, Week 2, Week 3 and Week 4 plan.
 
-Use EXACTLY these sections:
+## 8. Technical Topics to Study
 
-## Overall Profile Assessment
+Recommend branch-specific technical topics.
 
-Assess the student's academic background, practical
-exposure, current skills and career readiness.
+## 9. Industry Tools and Professional Skills
 
-## Career Direction
+Recommend relevant tools, software, laboratory methods, business tools, engineering tools, analytical tools or professional skills based on the actual branch.
 
-Explain how the student's actual academic branch,
-career interest and target career goal connect.
+## 10. Project Ideas
 
-## Recommended Career Paths
+Give EXACTLY 3 project ideas.
 
-Give relevant career paths for the student's actual
-academic field and career interest.
+Each project must include:
+- Project title
+- What the student should build/do
+- Skills demonstrated
+- Why it is relevant to the student's target career
 
-## Top Strengths
+The three projects must be appropriate for the student's actual branch.
 
-Identify the student's strongest academic, practical,
-technical and professional areas.
+## 11. Interview Preparation
 
-## Skill Gap Analysis
-
-Explain the student's critical skill gaps and
-development areas.
-
-## Areas to Improve
-
-Give specific and actionable improvements related to
-the student's actual academic field.
-
-## 30-Day Improvement Plan
-
-### Week 1
-
-Give practical measurable tasks.
-
-### Week 2
-
-Give practical measurable tasks.
-
-### Week 3
-
-Give practical measurable tasks.
-
-### Week 4
-
-Give practical measurable tasks.
-
-## Technical Topics to Study
-
-Recommend field-specific technical, academic or
-professional topics.
-
-## Industry Tools and Professional Skills
-
-Recommend appropriate industry tools, software,
-laboratory methods, business tools, analytical tools,
-professional methods or domain-specific skills.
-
-## Project Ideas
-
-Give EXACTLY 3 practical project ideas.
-
-Project 1:
-Include title, objective, skills/tools and expected outcome.
-
-Project 2:
-Include title, objective, skills/tools and expected outcome.
-
-Project 3:
-Include title, objective, skills/tools and expected outcome.
-
-The three projects MUST match the student's actual
-academic field and career direction.
-
-Do NOT automatically suggest software projects.
-
-Engineering students should receive engineering projects.
-
-Science students should receive scientific, laboratory,
-research or analytical projects where appropriate.
-
-Food and nutrition students should receive food,
-nutrition, dietetics, food safety or food analysis projects.
-
-Commerce and finance students should receive accounting,
-finance, auditing, banking or business projects.
-
-Management, marketing and HR students should receive
-business, management, marketing or HR projects.
-
-Humanities students should receive research,
-communication, public-policy, documentation or other
-appropriate humanities projects.
-
-## Interview Preparation
-
-Include:
-
-- Core technical preparation
-- HR preparation
-- Communication improvement
+Cover:
+- Core technical/domain questions
+- HR questions
+- Communication
 - Project explanation
 - Internship explanation
 - Aptitude preparation where relevant
 
-Keep the advice practical, realistic and personalized.
+Keep recommendations specific to the student's field.
+
+Finish with a short practical action summary.
 
 Do not guarantee placement.
 """
 
-    client = genai.Client(
-        api_key=gemini_api_key.strip()
+
+# ============================================================
+# GENERATE GEMINI GUIDANCE
+# ============================================================
+
+def generate_ai_guidance(
+    student,
+    prediction_context=None
+):
+
+    api_key = st.session_state.get(
+        "gemini_api_key",
+        ""
+    )
+
+    if not api_key:
+
+        raise ValueError(
+            "Please enter your Gemini API key."
+        )
+
+    prompt = build_gemini_prompt(
+        student,
+        prediction_context
+    )
+
+    client = get_gemini_client(
+        api_key
     )
 
     interaction = client.interactions.create(
@@ -1664,32 +2010,243 @@ Do not guarantee placement.
         store=False
     )
 
-    return extract_gemini_text(
+    answer = extract_gemini_text(
         interaction
     )
 
+    if not answer:
 
-# ============================================================
-# SESSION STATE
-# ============================================================
+        raise ValueError(
+            "Gemini returned an empty response."
+        )
 
-if "prediction_result" not in st.session_state:
-
-    st.session_state.prediction_result = None
-
-
-if "student_data" not in st.session_state:
-
-    st.session_state.student_data = None
-
-
-if "ai_career_advice" not in st.session_state:
-
-    st.session_state.ai_career_advice = None
+    return answer
 
 
 # ============================================================
-# HEADER
+# BUILD STUDENT PROFILE
+# ============================================================
+
+def build_student_profile(
+    gender,
+    age,
+    ug_degree,
+    ug_branch,
+    ug_cgpa,
+    has_pg,
+    pg_degree,
+    pg_branch,
+    pg_cgpa,
+    backlogs,
+    internships,
+    projects,
+    certifications,
+    coding_skills,
+    communication_skills,
+    aptitude_score,
+    career_interest,
+    target_career_goal,
+    domain_scores
+):
+
+    student = {
+
+        "gender": gender,
+
+        "age": age,
+
+        # Normalized names used by the model layer.
+        "ug_degree": ug_degree,
+
+        "degree": ug_degree,
+
+        "ug_branch": ug_branch,
+
+        "branch": map_branch_for_model(
+            ug_branch
+        ),
+
+        "ug_cgpa": float(
+            ug_cgpa
+        ),
+
+        "cgpa": float(
+            ug_cgpa
+        ),
+
+        "has_pg": has_pg,
+
+        "pg_degree": pg_degree,
+
+        "pg_branch": pg_branch,
+
+        "pg_cgpa": (
+            float(pg_cgpa)
+            if has_pg
+            else None
+        ),
+
+        "backlogs": int(
+            backlogs
+        ),
+
+        "internships": int(
+            internships
+        ),
+
+        "projects": int(
+            projects
+        ),
+
+        "certifications": int(
+            certifications
+        ),
+
+        "coding_skills": int(
+            coding_skills
+        ),
+
+        "communication_skills": int(
+            communication_skills
+        ),
+
+        "aptitude_score": int(
+            aptitude_score
+        ),
+
+        "career_interest": (
+            career_interest
+        ),
+
+        "target_career_goal": (
+            target_career_goal.strip()
+        )
+    }
+
+    for skill, score in domain_scores.items():
+
+        student[
+            f"skill_{skill}"
+        ] = score
+
+    return student
+
+
+# ============================================================
+# RUN PLACEMENT PREDICTION
+# ============================================================
+
+def run_prediction(student):
+
+    (
+        model,
+        artifact_features,
+        recommendation_rules
+    ) = load_components()
+
+    model_input, input_type = (
+        prepare_model_input(
+            model,
+            student,
+            artifact_features
+        )
+    )
+
+    # --------------------------------------------------------
+    # Prediction
+    # --------------------------------------------------------
+
+    prediction = model.predict(
+        model_input
+    )[0]
+
+    probability = (
+        get_positive_probability(
+            model,
+            model_input,
+            prediction
+        )
+    )
+
+    # --------------------------------------------------------
+    # Prediction text
+    # --------------------------------------------------------
+
+    prediction_number = None
+
+    try:
+        prediction_number = int(
+            prediction
+        )
+    except Exception:
+        pass
+
+    if prediction_number == 1:
+
+        prediction_text = (
+            "LIKELY PLACED"
+        )
+
+    elif prediction_number == 0:
+
+        prediction_text = (
+            "NOT PLACED"
+        )
+
+    else:
+
+        prediction_text = str(
+            prediction
+        )
+
+    # --------------------------------------------------------
+    # Recommendations
+    # --------------------------------------------------------
+
+    strengths = get_profile_strengths(
+        student
+    )
+
+    gaps = get_profile_gaps(
+        student
+    )
+
+    recommendations = (
+        generate_recommendations(
+            student,
+            recommendation_rules
+        )
+    )
+
+    return {
+
+        "prediction": prediction,
+
+        "prediction_text": prediction_text,
+
+        "probability": probability,
+
+        "model_input_type": input_type,
+
+        "model_features": list(
+            model_input.columns
+        )
+        if hasattr(
+            model_input,
+            "columns"
+        )
+        else [],
+
+        "strengths": strengths,
+
+        "gaps": gaps,
+
+        "recommendations": recommendations
+    }
+
+
+# ============================================================
+# TITLE
 # ============================================================
 
 st.title(
@@ -1697,75 +2254,235 @@ st.title(
 )
 
 st.write(
-    "Predict placement readiness using machine learning "
-    "and receive personalized, field-specific AI career guidance."
+    """
+Predict placement readiness from an academic and employability profile,
+or use Gemini independently for personalized career guidance.
+"""
 )
 
 st.info(
-    "⚠️ This system provides decision support based on a "
-    "trained machine-learning model. It does not guarantee placement."
+    """
+⚠️ Placement predictions are based on the trained model and should be
+treated as decision-support information, not a guarantee of employment.
+"""
 )
 
 
 # ============================================================
-# MODE SELECTION
+# ANALYSIS MODE
 # ============================================================
 
-st.header(
-    "🚀 Choose a Service"
+st.divider()
+
+st.subheader(
+    "Choose Analysis Mode"
 )
 
-service_mode = st.radio(
+mode = st.radio(
     "What would you like to use?",
     [
-        "🔮 Placement Prediction",
-        "🤖 AI Career Guidance"
+        "🔮 Placement Prediction + AI Guidance",
+        "🤖 AI Career Guidance Only"
     ],
     horizontal=True
 )
 
+if mode == "🤖 AI Career Guidance Only":
+
+    st.success(
+        "AI-only mode is active. You can generate Gemini career guidance without running the placement prediction model."
+    )
+
 
 # ============================================================
-# EDUCATION PROFILE
+# GEMINI API KEY
 # ============================================================
 
-st.header(
-    "🎓 Education Profile"
+st.subheader(
+    "🔑 Gemini AI"
 )
 
-col1, col2 = st.columns(2)
+api_key = st.text_input(
+    "Gemini API Key",
+    type="password",
+    value=st.session_state.get(
+        "gemini_api_key",
+        ""
+    ),
+    help="Your key is used only for the current Streamlit session."
+)
 
+if api_key:
+
+    st.session_state.gemini_api_key = (
+        api_key.strip()
+    )
+
+else:
+
+    st.caption(
+        "Gemini guidance requires a Gemini API key."
+    )
+
+
+# ============================================================
+# STUDENT PROFILE
+# ============================================================
+
+st.divider()
+
+st.header(
+    "📋 Student Profile"
+)
+
+
+# ============================================================
+# EDUCATION
+# ============================================================
+
+st.subheader(
+    "🎓 Education"
+)
+
+col1, col2, col3 = st.columns(3)
 
 with col1:
 
     ug_degree = st.selectbox(
         "UG Degree",
-        UG_DEGREES
+        [
+            "BE",
+            "BTech",
+            "BSc",
+            "BCA",
+            "BBA",
+            "BCom",
+            "BA",
+            "Other"
+        ]
     )
-
-    ug_branch = st.selectbox(
-        "UG Branch / Major",
-        BRANCH_OPTIONS
-    )
-
 
 with col2:
 
-    has_pg = st.checkbox(
-        "I have postgraduate education"
+    branches = [
+
+        "Computer Science",
+        "Information Technology",
+        "Data Science",
+        "Artificial Intelligence",
+        "Machine Learning",
+        "Cyber Security",
+        "Software Engineering",
+        "Computer Applications",
+
+        "Mechanical Engineering",
+        "Automobile Engineering",
+        "Production Engineering",
+        "Industrial Engineering",
+        "Aeronautical Engineering",
+        "Aerospace Engineering",
+
+        "Electrical Engineering",
+        "Electronics Engineering",
+        "Electronics and Communication Engineering",
+        "Biomedical Engineering",
+
+        "Civil Engineering",
+        "Chemical Engineering",
+
+        "Mathematics",
+        "Statistics",
+        "Physics",
+        "Chemistry",
+        "Environmental Science",
+
+        "Biotechnology",
+        "Microbiology",
+        "Biochemistry",
+        "Biological Sciences",
+        "Life Sciences",
+        "Genetics",
+        "Botany",
+        "Zoology",
+
+        "Food Science and Nutrition",
+        "Food Technology",
+        "Nutrition and Dietetics",
+
+        "Economics",
+        "Commerce",
+        "Business Administration",
+        "Finance",
+        "Accounting",
+        "Management",
+        "Marketing",
+        "Human Resources",
+
+        "Psychology",
+        "English",
+        "Political Science",
+        "Sociology",
+        "History",
+        "Public Administration",
+
+        "Other"
+    ]
+
+    ug_branch = st.selectbox(
+        "UG Branch / Major",
+        branches
     )
 
-    if has_pg:
+with col3:
+
+    ug_cgpa = st.number_input(
+        "UG CGPA",
+        min_value=0.0,
+        max_value=10.0,
+        value=7.0,
+        step=0.1
+    )
+
+
+# ============================================================
+# PG
+# ============================================================
+
+has_pg = st.checkbox(
+    "I have postgraduate education"
+)
+
+pg_degree = "Not Applicable"
+pg_branch = "Not Applicable"
+pg_cgpa = 0.0
+
+if has_pg:
+
+    pg1, pg2, pg3 = st.columns(3)
+
+    with pg1:
 
         pg_degree = st.selectbox(
             "PG Degree",
-            PG_DEGREES
+            [
+                "MTech",
+                "MSc",
+                "MCA",
+                "MBA",
+                "MCom",
+                "MA",
+                "Other"
+            ]
         )
+
+    with pg2:
 
         pg_branch = st.text_input(
             "PG Specialization",
-            placeholder="Example: Data Analytics"
+            placeholder="Example: Data Science"
         )
+
+    with pg3:
 
         pg_cgpa = st.number_input(
             "PG CGPA",
@@ -1775,23 +2492,16 @@ with col2:
             step=0.1
         )
 
-    else:
-
-        pg_degree = "None"
-        pg_branch = ""
-        pg_cgpa = 0.0
-
 
 # ============================================================
 # PERSONAL INFORMATION
 # ============================================================
 
-st.header(
-    "👤 Student Profile"
+st.subheader(
+    "👤 Personal Information"
 )
 
-col1, col2, col3 = st.columns(3)
-
+col1, col2 = st.columns(2)
 
 with col1:
 
@@ -1799,9 +2509,12 @@ with col1:
         "Gender",
         [
             "Male",
-            "Female"
+            "Female",
+            "Other"
         ]
     )
+
+with col2:
 
     age = st.number_input(
         "Age",
@@ -1811,25 +2524,26 @@ with col1:
     )
 
 
-with col2:
+# ============================================================
+# PLACEMENT PROFILE
+# ============================================================
 
-    cgpa = st.number_input(
-        "UG CGPA",
-        min_value=0.0,
-        max_value=10.0,
-        value=7.0,
-        step=0.1
-    )
+st.subheader(
+    "💼 Placement Profile"
+)
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
 
     backlogs = st.number_input(
-        "Number of Backlogs",
+        "Backlogs",
         min_value=0,
         max_value=20,
         value=0
     )
 
-
-with col3:
+with col2:
 
     internships = st.number_input(
         "Internships",
@@ -1838,6 +2552,8 @@ with col3:
         value=1
     )
 
+with col3:
+
     projects = st.number_input(
         "Projects",
         min_value=0,
@@ -1845,19 +2561,7 @@ with col3:
         value=2
     )
 
-
-# ============================================================
-# PLACEMENT PROFILE
-# ============================================================
-
-st.header(
-    "📚 Placement Profile"
-)
-
-col1, col2, col3 = st.columns(3)
-
-
-with col1:
+with col4:
 
     certifications = st.number_input(
         "Certifications",
@@ -1867,7 +2571,27 @@ with col1:
     )
 
 
+col1, col2, col3 = st.columns(3)
+
+with col1:
+
+    coding_skills = st.slider(
+        "Programming / Computational Skills",
+        min_value=1,
+        max_value=10,
+        value=5
+    )
+
 with col2:
+
+    communication_skills = st.slider(
+        "Communication Skills",
+        min_value=1,
+        max_value=10,
+        value=5
+    )
+
+with col3:
 
     aptitude_score = st.slider(
         "Aptitude Score",
@@ -1877,271 +2601,229 @@ with col2:
     )
 
 
-with col3:
-
-    communication_skills = st.slider(
-        "Communication Skills",
-        min_value=1,
-        max_value=10,
-        value=6
-    )
-
-
-# ============================================================
-# GENERAL COMPUTATIONAL SKILLS
-# ============================================================
-
-st.subheader(
-    "💻 General Programming / Computational Skills"
-)
-
-coding_skills = st.slider(
-    "General Programming / Computational Skills",
-    min_value=1,
-    max_value=10,
-    value=5,
-    help=(
-        "For computing branches this represents programming "
-        "ability. For non-computing branches it can represent "
-        "computational or digital skills where applicable."
-    )
-)
-
-
 # ============================================================
 # CAREER DIRECTION
 # ============================================================
 
-st.header(
-    "🎯 Career Direction"
+st.subheader(
+    "🧭 Career Direction"
 )
 
 career_options = get_career_interests(
     ug_branch
 )
 
-col1, col2 = st.columns(2)
+career_interest = st.selectbox(
+    "Career Interest",
+    career_options
+)
 
-
-with col1:
-
-    career_interest = st.selectbox(
-        "Career Interest",
-        career_options
-    )
-
-
-with col2:
-
-    target_career_goal = st.text_input(
-        "Target Career Goal",
-        placeholder=(
-            "Example: Data Analyst, Clinical Nutritionist, "
-            "Financial Analyst, Civil Site Engineer..."
-        )
-    )
+target_career_goal = st.text_input(
+    "Target Career Goal",
+    placeholder="Example: Data Analyst, Food Safety Officer, Financial Analyst, Research Scientist"
+)
 
 
 # ============================================================
 # BRANCH-SPECIFIC SKILLS
 # ============================================================
 
-st.header(
-    "🧠 Branch-Specific Skills"
+st.subheader(
+    f"🧠 {ug_branch} Skills"
 )
 
-st.write(
-    f"Rate your current ability in skills relevant to "
-    f"**{ug_branch}**."
+st.caption(
+    "Rate your current confidence in the skills relevant to your actual academic branch."
 )
 
-skills = get_branch_skills(
+branch_skills = get_branch_skills(
     ug_branch
 )
 
-branch_skill_scores = {}
+domain_scores = {}
 
 skill_columns = st.columns(
-    len(skills)
+    len(branch_skills)
 )
 
-for index, skill in enumerate(skills):
+for index, skill in enumerate(
+    branch_skills
+):
 
     with skill_columns[index]:
 
-        branch_skill_scores[skill] = st.slider(
+        domain_scores[
+            skill
+        ] = st.slider(
             skill,
             min_value=1,
             max_value=10,
             value=5,
-            key=f"skill_{skill}"
+            key=f"domain_{skill}"
         )
 
 
 # ============================================================
-# BUILD STUDENT DATA
+# BUILD STUDENT
 # ============================================================
 
-domain_skill_average = round(
-    np.mean(
-        list(
-            branch_skill_scores.values()
-        )
-    ),
-    2
+student = build_student_profile(
+
+    gender=gender,
+
+    age=age,
+
+    ug_degree=ug_degree,
+
+    ug_branch=ug_branch,
+
+    ug_cgpa=ug_cgpa,
+
+    has_pg=has_pg,
+
+    pg_degree=pg_degree,
+
+    pg_branch=pg_branch,
+
+    pg_cgpa=pg_cgpa,
+
+    backlogs=backlogs,
+
+    internships=internships,
+
+    projects=projects,
+
+    certifications=certifications,
+
+    coding_skills=coding_skills,
+
+    communication_skills=communication_skills,
+
+    aptitude_score=aptitude_score,
+
+    career_interest=career_interest,
+
+    target_career_goal=target_career_goal,
+
+    domain_scores=domain_scores
 )
 
-student = {
-
-    "gender": gender,
-
-    "age": age,
-
-    # IMPORTANT:
-    # These are the model-compatible names.
-    "degree": ug_degree,
-
-    "branch": map_branch_for_model(
-        ug_branch
-    ),
-
-    # User-facing fields
-    "ug_degree": ug_degree,
-
-    "ug_branch": ug_branch,
-
-    "pg_degree": pg_degree,
-
-    "pg_branch": pg_branch,
-
-    "pg_cgpa": pg_cgpa,
-
-    "has_pg": has_pg,
-
-    "cgpa": cgpa,
-
-    "backlogs": backlogs,
-
-    "internships": internships,
-
-    "projects": projects,
-
-    "certifications": certifications,
-
-    "coding_skills": coding_skills,
-
-    "communication_skills": communication_skills,
-
-    "aptitude_score": aptitude_score,
-
-    "career_interest": career_interest,
-
-    "target_career_goal": target_career_goal,
-
-    "branch_skills": branch_skill_scores,
-
-    "domain_skills": domain_skill_average
-}
-
 
 # ============================================================
-# PLACEMENT PREDICTION MODE
+# ACTION BUTTON
 # ============================================================
 
-if service_mode == "🔮 Placement Prediction":
+st.divider()
 
-    st.divider()
+if mode == "🤖 AI Career Guidance Only":
 
-    st.header(
-        "🔮 Placement Prediction"
+    generate_button = st.button(
+        "🤖 Generate AI Career Guidance",
+        use_container_width=True,
+        type="primary"
     )
 
-    st.write(
-        "Use the trained machine-learning model to estimate "
-        "placement readiness from the academic and placement profile."
-    )
+else:
 
-    if st.button(
+    generate_button = st.button(
         "🔮 Predict Placement Readiness",
-        width="stretch"
-    ):
+        use_container_width=True,
+        type="primary"
+    )
 
-        try:
 
-            prediction, probability, processed = (
-                predict_placement(
-                    student
-                )
+# ============================================================
+# AI-ONLY MODE
+# ============================================================
+
+if (
+    generate_button
+    and mode == "🤖 AI Career Guidance Only"
+):
+
+    st.session_state.student_profile = student
+    st.session_state.ai_mode = "only"
+
+    try:
+
+        with st.spinner(
+            "Gemini is preparing personalized career guidance..."
+        ):
+
+            advice = generate_ai_guidance(
+                student,
+                prediction_context=None
             )
 
-            reliability = get_reliability(
-                probability
-            )
+        st.session_state.ai_career_advice = (
+            advice
+        )
 
-            readiness, readiness_icon = get_readiness(
-                probability
-            )
+    except Exception as e:
 
-            recommendations = generate_recommendations(
+        st.error(
+            f"Gemini guidance failed: {e}"
+        )
+
+
+# ============================================================
+# PLACEMENT MODE
+# ============================================================
+
+if (
+    generate_button
+    and mode == "🔮 Placement Prediction + AI Guidance"
+):
+
+    st.session_state.student_profile = student
+    st.session_state.ai_mode = "placement"
+    st.session_state.ai_career_advice = None
+
+    try:
+
+        with st.spinner(
+            "Running placement prediction..."
+        ):
+
+            result = run_prediction(
                 student
             )
 
-            skill_gaps = analyze_skill_gaps(
-                branch_skill_scores
-            )
+        st.session_state.prediction_result = (
+            result
+        )
 
-            result = {
+    except Exception as e:
 
-                "prediction": prediction,
+        st.session_state.prediction_result = None
 
-                "probability": probability,
+        st.error(
+            "Prediction failed."
+        )
 
-                "reliability": reliability,
+        st.code(
+            str(e)
+        )
 
-                "readiness": readiness,
-
-                "readiness_icon": readiness_icon,
-
-                "recommendations": recommendations,
-
-                "skill_gaps": skill_gaps
-
-            }
-
-            st.session_state.prediction_result = result
-
-            st.session_state.student_data = student
-
-            st.session_state.ai_career_advice = None
-
-            st.success(
-                "Placement prediction completed successfully."
-            )
-
-        except Exception as e:
-
-            st.error(
-                "Prediction failed."
-            )
-
-            st.code(
-                str(e)
-            )
+        st.warning(
+            """
+The app now uses the fitted model's own feature_names_in_ when
+available, so category columns such as branch_AI, degree_BCA and
+gender_Female are not blindly sent to the model.
+"""
+        )
 
 
 # ============================================================
 # DISPLAY PREDICTION
 # ============================================================
 
-if (
-    service_mode == "🔮 Placement Prediction"
-    and
-    st.session_state.prediction_result is not None
-):
+result = st.session_state.prediction_result
 
-    result = (
-        st.session_state.prediction_result
-    )
+if (
+    result is not None
+    and st.session_state.ai_mode == "placement"
+):
 
     st.divider()
 
@@ -2149,23 +2831,38 @@ if (
         "🎯 Placement Prediction Result"
     )
 
-    prediction_text = (
+    probability = result[
+        "probability"
+    ]
 
-        "LIKELY PLACED"
+    prediction_text = result[
+        "prediction_text"
+    ]
 
-        if result["prediction"] == 1
+    if probability is not None:
 
-        else
+        probability_percent = (
+            probability * 100
+        )
 
-        "NOT LIKELY PLACED"
-    )
+        readiness, readiness_emoji = (
+            get_readiness_level(
+                probability
+            )
+        )
 
-    probability_percent = (
-        result["probability"] * 100
-    )
+    else:
 
-    col1, col2, col3, col4 = st.columns(4)
+        probability_percent = None
 
+        readiness, readiness_emoji = (
+            get_readiness_level(
+                None
+            )
+        )
+
+
+    col1, col2, col3 = st.columns(3)
 
     with col1:
 
@@ -2174,267 +2871,204 @@ if (
             prediction_text
         )
 
-
     with col2:
 
-        st.metric(
-            "Placement Probability",
-            f"{probability_percent:.2f}%"
-        )
+        if probability_percent is not None:
 
-
-    with col3:
-
-        st.metric(
-            "Readiness",
-            f"{result['readiness_icon']} "
-            f"{result['readiness']}"
-        )
-
-
-    with col4:
-
-        st.metric(
-            "Prediction Reliability",
-            result["reliability"]
-        )
-
-
-    st.progress(
-        max(
-            0.0,
-            min(
-                1.0,
-                result["probability"]
-            )
-        )
-    )
-
-    st.caption(
-        "The probability is the model's estimated probability "
-        "for the positive placement class."
-    )
-
-
-    # ========================================================
-    # SKILL GAP ANALYSIS
-    # ========================================================
-
-    st.divider()
-
-    st.header(
-        "📊 Skill Gap Analysis"
-    )
-
-    gaps = result["skill_gaps"]
-
-
-    if gaps["critical_gaps"]:
-
-        st.subheader(
-            "🔴 Critical Skill Gaps"
-        )
-
-        for item in gaps["critical_gaps"]:
-
-            st.write(
-                f"**{item['skill']}** — "
-                f"{item['score']}/10"
-            )
-
-    else:
-
-        st.success(
-            "No critical skill gaps detected."
-        )
-
-
-    if gaps["development_needed"]:
-
-        st.subheader(
-            "🟡 Skills Needing Development"
-        )
-
-        for item in gaps["development_needed"]:
-
-            st.write(
-                f"**{item['skill']}** — "
-                f"{item['score']}/10"
-            )
-
-
-    if gaps["strengths"]:
-
-        st.subheader(
-            "🟢 Current Strengths"
-        )
-
-        for item in gaps["strengths"]:
-
-            st.write(
-                f"**{item['skill']}** — "
-                f"{item['score']}/10"
-            )
-
-
-    # ========================================================
-    # RULE-BASED RECOMMENDATIONS
-    # ========================================================
-
-    st.divider()
-
-    st.header(
-        "💡 Personalized Improvement Recommendations"
-    )
-
-    for recommendation in result["recommendations"]:
-
-        st.write(
-            f"• {recommendation}"
-        )
-
-
-# ============================================================
-# AI CAREER GUIDANCE MODE
-# ============================================================
-
-if service_mode == "🤖 AI Career Guidance":
-
-    st.divider()
-
-    st.header(
-        "🤖 AI Career Guidance"
-    )
-
-    st.write(
-        "Generate personalized career guidance using Gemini. "
-        "This option works independently and does not require "
-        "a placement prediction first."
-    )
-
-    st.info(
-        "Your actual academic branch is used as the primary "
-        "academic context. Gemini will tailor the guidance "
-        "to your branch, career interest and target career goal."
-    )
-
-    gemini_api_key = st.text_input(
-        "Gemini API Key",
-        type="password",
-        key="gemini_ai_only_key",
-        help=(
-            "Your API key is used only for the current "
-            "session to generate career guidance."
-        )
-    )
-
-    student["gemini_api_key"] = (
-        gemini_api_key
-    )
-
-    existing_prediction = (
-        st.session_state.prediction_result
-    )
-
-    if existing_prediction is not None:
-
-        st.success(
-            "A placement prediction is available. "
-            "Gemini can use it as additional context."
-        )
-
-    else:
-
-        st.caption(
-            "No placement prediction is required for AI guidance."
-        )
-
-
-    if st.button(
-        "🤖 Generate AI Career Guidance",
-        width="stretch",
-        key="generate_ai_guidance"
-    ):
-
-        if not gemini_api_key.strip():
-
-            st.warning(
-                "Please enter your Gemini API key."
+            st.metric(
+                "Placement Probability",
+                f"{probability_percent:.2f}%"
             )
 
         else:
 
-            try:
+            st.metric(
+                "Placement Probability",
+                "Not available"
+            )
 
-                skill_gaps = analyze_skill_gaps(
-                    branch_skill_scores
+    with col3:
+
+        st.metric(
+            "Placement Readiness",
+            f"{readiness_emoji} {readiness}"
+        )
+
+
+    # ========================================================
+    # PROFILE STRENGTHS
+    # ========================================================
+
+    st.subheader(
+        "💪 Your Strengths"
+    )
+
+    for strength in result[
+        "strengths"
+    ]:
+
+        st.success(
+            strength
+        )
+
+
+    # ========================================================
+    # SKILL GAPS
+    # ========================================================
+
+    st.subheader(
+        "📈 Areas to Improve"
+    )
+
+    gaps = result[
+        "gaps"
+    ]
+
+    if gaps:
+
+        for gap in gaps:
+
+            st.warning(
+                gap
+            )
+
+    else:
+
+        st.success(
+            "No major profile gaps were identified from the supplied inputs."
+        )
+
+
+    # ========================================================
+    # RECOMMENDATIONS
+    # ========================================================
+
+    st.subheader(
+        "💡 Personalized Recommendations"
+    )
+
+    recommendations = result[
+        "recommendations"
+    ]
+
+    if recommendations:
+
+        for index, recommendation in enumerate(
+            recommendations,
+            start=1
+        ):
+
+            st.write(
+                f"**{index}.** {recommendation}"
+            )
+
+    else:
+
+        st.info(
+            "No additional rule-based recommendations are available."
+        )
+
+
+    # ========================================================
+    # MODEL INPUT STATUS
+    # ========================================================
+
+    with st.expander(
+        "Model compatibility information"
+    ):
+
+        st.write(
+            "Input preparation mode:",
+            result["model_input_type"]
+        )
+
+        if result["model_features"]:
+
+            st.write(
+                "Number of features sent to the model:",
+                len(
+                    result[
+                        "model_features"
+                    ]
+                )
+            )
+
+
+    # ========================================================
+    # AI GUIDANCE AFTER PREDICTION
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "🤖 Personalized AI Career Guidance"
+    )
+
+    st.write(
+        "Gemini can now interpret your placement result together with your academic branch, career interest, skills and goals."
+    )
+
+    ai_button = st.button(
+        "🧠 Generate Personalized Gemini Guidance",
+        use_container_width=True
+    )
+
+    if ai_button:
+
+        try:
+
+            if probability is not None:
+
+                prediction_context = f"""
+Placement Prediction:
+{prediction_text}
+
+Placement Probability:
+{probability_percent:.2f}%
+
+Placement Readiness:
+{readiness}
+"""
+
+            else:
+
+                prediction_context = f"""
+Placement Prediction:
+{prediction_text}
+
+The model did not provide a probability score.
+"""
+
+            with st.spinner(
+                "Gemini is preparing personalized career guidance..."
+            ):
+
+                advice = generate_ai_guidance(
+                    student,
+                    prediction_context
                 )
 
-                with st.spinner(
-                    "Generating personalized Gemini career guidance..."
-                ):
+            st.session_state.ai_career_advice = (
+                advice
+            )
 
-                    advice = generate_gemini_guidance(
-                        student,
-                        skill_gaps,
-                        existing_prediction
-                    )
+        except Exception as e:
 
-                if advice:
-
-                    st.session_state.ai_career_advice = (
-                        advice
-                    )
-
-                    st.session_state.student_data = (
-                        student
-                    )
-
-                    st.success(
-                        "AI Career Guidance Generated Successfully!"
-                    )
-
-                else:
-
-                    st.error(
-                        "Gemini returned no readable text."
-                    )
-
-            except ImportError as e:
-
-                st.error(
-                    "Google GenAI package is missing."
-                )
-
-                st.code(
-                    str(e)
-                )
-
-            except Exception as e:
-
-                st.error(
-                    "Gemini career guidance could not be generated."
-                )
-
-                st.code(
-                    str(e)
-                )
+            st.error(
+                f"Gemini guidance failed: {e}"
+            )
 
 
 # ============================================================
-# DISPLAY AI GUIDANCE
+# DISPLAY AI-ONLY OR POST-PREDICTION GUIDANCE
 # ============================================================
 
-if (
-    st.session_state.ai_career_advice
-    and
-    service_mode == "🤖 AI Career Guidance"
-):
+if st.session_state.ai_career_advice:
 
     st.divider()
 
     st.header(
-        "🤖 Personalized AI Career Guidance"
+        "🧠 Personalized AI Career Guidance"
     )
 
     st.markdown(
@@ -2449,8 +3083,5 @@ if (
 st.divider()
 
 st.caption(
-    "AI Student Placement Predictor | "
-    "Machine Learning + Branch-Specific Skills + "
-    "Skill Gap Analysis + Prediction Reliability + "
-    "Gemini Personalized Career Guidance"
+    "AI Student Placement Predictor | Machine Learning + Gemini Career Guidance"
 )

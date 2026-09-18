@@ -903,24 +903,13 @@ if result is not None:
     with c1:
         st.metric("Model Prediction", result["prediction_text"])
     with c2:
-        st.metric("Model Estimated Probability", f"{probability_pct:.2f}%" if probability_pct is not None else "N/A")
+        st.metric("Placement Probability", f"{probability_pct:.2f}%" if probability_pct is not None else "N/A")
     with c3:
-        st.metric("Profile Readiness Index", f"{result['profile_readiness']:.1f}/100")
+        st.metric("Profile Readiness", f"{result['profile_readiness']:.1f}/100")
 
     if probability_pct is not None:
         st.progress(float(np.clip(probability, 0, 1)))
-
-    st.warning("Important: the ML probability comes from the supplied trained model. It is not a calibrated real-world employment probability. The Profile Readiness Index is a separate transparent heuristic and should not be confused with the ML probability.")
-
-    st.subheader("🔍 What the ML model actually used")
-    used_rows = []
-    for feature, value in zip(result["feature_names"], result["model_input"].iloc[0].tolist()):
-        used_rows.append({"ML Feature": feature, "Value": value})
-    st.dataframe(pd.DataFrame(used_rows), use_container_width=True, hide_index=True)
-
-    st.subheader("🧩 Inputs not used by the supplied ML model")
-    st.write("These are still used by AI Career Guidance and/or the Profile Readiness Index:")
-    st.write("PG degree, PG specialization, PG CGPA, career interest, target career goal, and individual branch-specific skill ratings.")
+        st.caption("Estimated probability from the trained placement model.")
 
     st.subheader("💪 Your Strengths")
     for item in result["strengths"]:
@@ -936,17 +925,6 @@ if result is not None:
     st.subheader("💡 Personalized Recommendations")
     for i, item in enumerate(result["recommendations"], 1):
         st.write(f"**{i}.** {item}")
-
-    metadata = result.get("metadata", {})
-    if metadata:
-        with st.expander("📊 Model information and limitations"):
-            st.write(f"Model: **{metadata.get('model_name', 'Unknown')}**")
-            st.write(f"Training dataset size: **{metadata.get('dataset_size', 'Unknown')}**")
-            st.write(f"Reported test F1: **{metadata.get('test_f1_score', 'Unknown')}**")
-            st.write(f"Reported cross-validation F1: **{metadata.get('cross_validation_f1', 'Unknown')}**")
-            st.write(f"SMOTE used: **{metadata.get('smote_used', 'Unknown')}**")
-            if metadata.get("dataset_note"):
-                st.info(metadata["dataset_note"])
 
     st.divider()
     st.subheader("🤖 Personalized AI Career Guidance")

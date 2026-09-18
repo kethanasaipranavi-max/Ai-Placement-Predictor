@@ -213,8 +213,77 @@ def load_components():
     return model, feature_names, rules, metadata
 
 
-def build_exact_model_input(student, feature_names):
-    """Build the exact 21-feature representation used by the supplied model artifact."""
+def get_model_feature_names(model, artifact_features):
+    """Use the features the fitted model actually expects.
+
+    The feature-name artifact in this project is stale and contains fields such as
+    gender_Female, degree_BCA and branch_AI that are NOT present in the trained
+    placement model. The fitted estimator is therefore the source of truth.
+    """
+    model_names = getattr(model, "feature_names_in_", None)
+
+    if model_names is not None:
+        names = [str(x) for x in model_names]
+        if names:
+            return names
+
+    # For a Pipeline, inspect the fitted steps from the end backwards.
+    named_steps = getattr(model, "named_steps", None)
+    if named_steps:
+        for _, step in reversed(list(named_steps.items())):
+            names = getattr(step, "feature_names_in_", None)
+            if names is not None:
+                names = [str(x) for x in names]
+                if names:
+                    return names
+
+    steps = getattr(model, "steps", None)
+    if steps:
+        for _, step in reversed(steps):
+            names = getattr(step, "feature_names_in_", None)
+            if names is not None:
+                names = [str(x) for x in names]
+                if names:
+                    return names
+
+    # This is the exact feature schema used to train the supplied model.
+    return [
+        "age",
+        "cgpa",
+        "backlogs",
+        "internships",
+        "certifications",
+        "coding_skills",
+        "communication_skills",
+        "aptitude_score",
+        "projects",
+        "gender_Male",
+        "degree_BE",
+        "degree_BSc",
+        "degree_BTech",
+        "branch_CS",
+        "branch_DS",
+        "branch_Electrical",
+        "branch_IT",
+        "branch_Mechanical",
+        "cgpa_category_Excellent",
+        "cgpa_category_Good",
+        "cgpa_category_Low",
+    ]
+
+
+def build_exact_model_input(student, feature_names, model=None):
+    """Build input using the fitted model's real schema.
+
+    IMPORTANT: do not use unsupported/stale feature-artifact columns. The supplied
+    artifact may contain gender_Female, degree_BCA and branch_AI, while the trained
+    model was fitted with only the 21 columns below.
+    """
+    if model is not None:
+        expected_features = get_model_feature_names(model, feature_names)
+    else:
+        expected_features = list(feature_names)
+
     model_branch = map_branch_for_model(student["ug_branch"])
     degree = student["ug_degree"]
     gender = student["gender"]
@@ -244,16 +313,19 @@ def build_exact_model_input(student, feature_names):
         "cgpa_category_Low": 1.0 if category == "Low" else 0.0,
     }
 
-    # Never silently invent feature columns. Use the artifact as the contract.
-    unknown = [f for f in feature_names if f not in values]
-    if unknown:
+    unsupported = [f for f in expected_features if f not in values]
+    if unsupported:
         raise RuntimeError(
-            "The supplied feature artifact contains unsupported features: "
-            + ", ".join(unknown)
+            "The trained model expects feature(s) this app cannot construct: "
+            + ", ".join(unsupported)
+            + ". Please use the matching model artifact."
         )
 
-    return pd.DataFrame([{f: values[f] for f in feature_names}], columns=feature_names)
-
+    # Exact order expected by the fitted estimator.
+    return pd.DataFrame(
+        [{f: values[f] for f in expected_features}],
+        columns=expected_features,
+    )
 
 def get_classes(model):
     classes = getattr(model, "classes_", None)
@@ -412,7 +484,7 @@ def generate_recommendations(student, rules):
 
 def run_prediction(student):
     model, feature_names, rules, metadata = load_components()
-    model_input = build_exact_model_input(student, feature_names)
+    model_input = build_exact_model_input(student, feature_names, model)
 
     prediction = model.predict(model_input)[0]
     probability = get_positive_probability(model, model_input)

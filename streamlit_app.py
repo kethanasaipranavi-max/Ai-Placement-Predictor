@@ -742,11 +742,30 @@ Under Project Ideas give EXACTLY 3 projects. For each include:
 
 
 def get_secret(name):
+    """
+    Read an API key from Streamlit Secrets first, then environment variables.
+    This never displays the actual secret value in the UI.
+    """
     try:
         value = st.secrets.get(name, "")
-        return str(value).strip() if value else ""
+        if value:
+            return str(value).strip()
     except Exception:
-        return ""
+        pass
+
+    value = os.getenv(name, "")
+    return str(value).strip() if value else ""
+
+
+def get_ai_configuration_status():
+    """
+    Check whether the AI provider keys are available.
+    Only returns True/False; secret values are never exposed.
+    """
+    return {
+        "Groq": bool(get_secret("GROQ_API_KEY")),
+        "Gemini": bool(get_secret("GEMINI_API_KEY")),
+    }
 
 
 def generate_with_gemini(prompt):
@@ -756,7 +775,7 @@ def generate_with_gemini(prompt):
 
     if not key:
         raise RuntimeError(
-            "GEMINI_API_KEY is not configured."
+            "GEMINI_API_KEY is not configured in Streamlit Secrets."
         )
 
     client = genai.Client(
@@ -841,11 +860,19 @@ def generate_with_gemini(prompt):
 
 
 def generate_with_groq(prompt):
+    """
+    Generate guidance using Groq.
+
+    The Groq key is expected to be stored as GROQ_API_KEY.
+    Groq API keys normally begin with gsk_, and the complete key
+    is sent unchanged as a Bearer token.
+    """
     key = get_secret("GROQ_API_KEY")
 
     if not key:
         raise RuntimeError(
-            "GROQ_API_KEY is not configured."
+            "GROQ_API_KEY is not configured in Streamlit Secrets. "
+            "Expected a Groq API key such as gsk_..."
         )
 
     payload = {
@@ -884,11 +911,19 @@ def generate_with_groq(prompt):
     try:
         with urllib.request.urlopen(
             request,
-            timeout=90,
+            timeout=30,
         ) as response:
-            body = json.loads(
-                response.read().decode("utf-8")
+            body_text = response.read().decode(
+                "utf-8",
+                errors="replace",
             )
+
+            try:
+                body = json.loads(body_text)
+            except json.JSONDecodeError:
+                raise RuntimeError(
+                    f"Groq returned a non-JSON response (HTTP {response.status})."
+                )
 
     except urllib.error.HTTPError as exc:
         details = exc.read().decode(
@@ -896,8 +931,42 @@ def generate_with_groq(prompt):
             errors="replace",
         )
 
+        # Give a useful diagnosis instead of hiding the provider error.
+        try:
+            error_json = json.loads(details)
+            api_message = (
+                error_json.get("error", {}).get("message")
+                or error_json.get("message")
+                or details
+            )
+        except Exception:
+            api_message = details
+
+        if exc.code == 401:
+            raise RuntimeError(
+                "Groq authentication failed (HTTP 401). "
+                "GROQ_API_KEY is present, but Groq rejected the key. "
+                "Check that the complete gsk_... key is copied into "
+                "Streamlit Secrets and has not been revoked."
+            ) from exc
+
+        if exc.code == 403:
+            raise RuntimeError(
+                f"Groq access was denied (HTTP 403): {api_message}"
+            ) from exc
+
+        if exc.code == 429:
+            raise RuntimeError(
+                f"Groq rate limit/quota reached (HTTP 429): {api_message}"
+            ) from exc
+
         raise RuntimeError(
-            f"Groq API error {exc.code}: {details}"
+            f"Groq API error (HTTP {exc.code}): {api_message}"
+        ) from exc
+
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Could not connect to Groq: {exc.reason}"
         ) from exc
 
     text = (
@@ -908,6 +977,12 @@ def generate_with_groq(prompt):
     )
 
     if not text:
+        api_error = body.get("error", {}).get("message")
+        if api_error:
+            raise RuntimeError(
+                f"Groq returned an error: {api_error}"
+            )
+
         raise RuntimeError(
             "Groq returned an empty response."
         )
@@ -919,34 +994,53 @@ def generate_ai_guidance(
     student,
     prediction_context=None,
 ):
-    """Groq primary; Gemini fallback."""
-    prompt = build_ai_prompt(student, prediction_context)
+    """
+    Groq is PRIMARY.
+    Gemini is FALLBACK only when Groq is unavailable or fails.
+
+    The returned provider tells the UI which service actually
+    generated the response.
+    """
+    prompt = build_ai_prompt(
+        student,
+        prediction_context,
+    )
+
     errors = []
 
+    groq_key = get_secret("GROQ_API_KEY")
+
     # 1. GROQ PRIMARY
-    if get_secret("GROQ_API_KEY"):
+    if groq_key:
         try:
             return generate_with_groq(prompt), "Groq"
         except Exception as exc:
             errors.append(f"Groq: {exc}")
+    else:
+        errors.append(
+            "Groq: GROQ_API_KEY is not configured in Streamlit Secrets."
+        )
 
     # 2. GEMINI FALLBACK
-    if get_secret("GEMINI_API_KEY"):
+    gemini_key = get_secret("GEMINI_API_KEY")
+
+    if gemini_key:
         try:
             return generate_with_gemini(prompt), "Gemini"
         except Exception as exc:
             errors.append(f"Gemini: {exc}")
-
-    if errors:
-        raise RuntimeError(
-            "Both AI services are currently unavailable. "
-            "Groq is the primary provider and Gemini is the fallback. "
-            "Please try again later when the provider limits reset."
+    else:
+        errors.append(
+            "Gemini: GEMINI_API_KEY is not configured in Streamlit Secrets."
         )
 
+    # IMPORTANT:
+    # Do not hide the real provider errors behind a generic message.
     raise RuntimeError(
-        "No AI API key is configured. Add GROQ_API_KEY and/or GEMINI_API_KEY to Streamlit Secrets."
+        "AI providers could not generate guidance.\n\n"
+        + "\n".join(errors)
     )
+
 
 def build_student_profile(
     gender,
@@ -1439,6 +1533,19 @@ if mode == "🔮 Placement Prediction":
 
 else:
 
+    ai_status = get_ai_configuration_status()
+    with st.expander("🔐 AI Provider Configuration Status"):
+        st.write(
+            f"Groq API key: **{'Configured' if ai_status['Groq'] else 'Not configured'}**"
+        )
+        st.write(
+            f"Gemini API key: **{'Configured' if ai_status['Gemini'] else 'Not configured'}**"
+        )
+        st.caption(
+            "Groq is the primary provider. Gemini is used only as a fallback. "
+            "Your API keys are never displayed."
+        )
+
     if st.button(
         "🤖 Generate AI Career Guidance",
         use_container_width=True,
@@ -1622,8 +1729,8 @@ if result is not None:
     )
 
     st.write(
-        "Gemini is tried first. If Gemini is unavailable "
-        "or rate-limited, Groq is used automatically."
+        "Groq is tried first. If Groq is unavailable or rate-limited, "
+        "Gemini is used automatically as a fallback."
     )
 
     if st.button(

@@ -8,7 +8,7 @@ An AI-powered Streamlit application that predicts student placement outcomes and
 
 ## 📌 About the Project
 
-The **AI Student Placement Predictor** is designed to help students understand their placement readiness based on their academic profile, skills, internships, projects, certifications, aptitude, communication skills, and career interests.
+The **AI Student Placement Predictor** helps students understand their placement readiness based on their academic profile, skills, internships, projects, certifications, aptitude, communication skills, and career interests.
 
 The application combines a Machine Learning placement prediction model with Generative AI-powered career guidance.
 
@@ -48,7 +48,7 @@ AI guidance is generated using **Groq**, with **Google Gemini** available as a f
 
 The placement prediction component uses a **Random Forest** machine-learning model.
 
-The application provides a placement probability estimate based on the trained model and a separate profile readiness analysis to help students understand areas that may need improvement.
+The application provides a placement probability estimate based on the trained model and a separate profile readiness analysis.
 
 ## 🛠️ Technology Stack
 
@@ -65,6 +65,7 @@ The application provides a placement probability estimate based on the trained m
 
 ## 📂 Project Structure
 
+```text
 Ai-Placement-Predictor/
 │
 ├── streamlit_app.py

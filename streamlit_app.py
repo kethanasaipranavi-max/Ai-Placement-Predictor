@@ -101,7 +101,7 @@ def get_branch_skills(branch):
 
 # UG degree list intentionally excludes BCA/BBA/BCom/BA from the UG
 # specialization/major list. Those are degree choices, not branch choices.
-UG_DEGREES = ["BE", "BTech", "BSc", "Other"]
+UG_DEGREES = ["BE", "BTech", "BSc", "BCA", "BBA", "BCom", "BA", "Other"]
 
 UG_SPECIALIZATIONS = [
     "Computer Science",
@@ -161,7 +161,7 @@ UG_SPECIALIZATIONS = [
 # available in PG Specialization. BCA/BBA/BCom/BA are included here because
 # they were explicitly requested for the PG specialization dropdown, while
 # they are not present in the UG specialization dropdown.
-PG_SPECIALIZATIONS = UG_SPECIALIZATIONS + ["BCA", "BBA", "BCom", "BA"]
+PG_SPECIALIZATIONS = UG_SPECIALIZATIONS.copy()
 
 PG_DEGREES = ["MTech", "ME", "MSc", "MCA", "MBA", "MCom", "MA", "MS", "MPhil", "Other"]
 # ============================================================
@@ -572,58 +572,47 @@ def get_model_feature_names(model, artifact_features):
 
 
 def build_exact_model_input(student, feature_names, model=None):
-    """Build input using the fitted model's real schema.
-
-    IMPORTANT: do not use unsupported/stale feature-artifact columns. The supplied
-    artifact may contain gender_Female, degree_BCA and branch_AI, while the trained
-    model was fitted with only the 21 columns below.
-    """
+    """Build the exact 17-feature input used by the current trained model."""
     if model is not None:
         expected_features = get_model_feature_names(model, feature_names)
     else:
         expected_features = list(feature_names)
 
-    model_branch = map_branch_for_model(student["ug_branch"])
-    degree = student["ug_degree"]
-    gender = student["gender"]
-    category = get_cgpa_category(student["ug_cgpa"])
-
+   # The current trained model uses these raw features:
+    # age, ug_cgpa, backlogs, internships, projects, certifications,
+    # coding_skills, communication_skills, aptitude_score,
+    # domain_skill_1 ... domain_skill_5, gender, ug_degree, ug_branch
+    domain_scores = list(student.get("branch_skills", {}).values())[:5]
+    while len(domain_scores) < 5:
+        domain_scores.append(5.0)
+        
     values = {
         "age": float(student["age"]),
-        "cgpa": float(student["ug_cgpa"]),
+        "ug_cgpa": float(student["ug_cgpa"]),
         "backlogs": float(student["backlogs"]),
         "internships": float(student["internships"]),
+        "projects": float(student["projects"]),
         "certifications": float(student["certifications"]),
         "coding_skills": float(student["coding_skills"]),
         "communication_skills": float(student["communication_skills"]),
         "aptitude_score": float(student["aptitude_score"]),
-        "projects": float(student["projects"]),
-        "gender_Male": 1.0 if gender == "Male" else 0.0,
-        "degree_BE": 1.0 if degree == "BE" else 0.0,
-        "degree_BSc": 1.0 if degree == "BSc" else 0.0,
-        "degree_BTech": 1.0 if degree == "BTech" else 0.0,
-        "branch_CS": 1.0 if model_branch == "CS" else 0.0,
-        "branch_DS": 1.0 if model_branch == "DS" else 0.0,
-        "branch_Electrical": 1.0 if model_branch == "Electrical" else 0.0,
-        "branch_IT": 1.0 if model_branch == "IT" else 0.0,
-        "branch_Mechanical": 1.0 if model_branch == "Mechanical" else 0.0,
-        "cgpa_category_Excellent": 1.0 if category == "Excellent" else 0.0,
-        "cgpa_category_Good": 1.0 if category == "Good" else 0.0,
-        "cgpa_category_Low": 1.0 if category == "Low" else 0.0,
+        "domain_skill_1": float(domain_scores[0]),
+        "domain_skill_2": float(domain_scores[1]),
+        "domain_skill_3": float(domain_scores[2]),
+        "domain_skill_4": float(domain_scores[3]),
+        "domain_skill_5": float(domain_scores[4]),
+        "gender": str(student["gender"]),
+        "ug_degree": str(student["ug_degree"]),
+        "ug_branch": str(student["ug_branch"]),        
     }
     unsupported = [f for f in expected_features if f not in values]
     if unsupported:
         raise RuntimeError(
             "The trained model expects feature(s) this app cannot construct: "
-            + ", ".join(unsupported)
-            + ". Please use the matching model artifact."
+            + ", ".join(unsupported)           
         )
 
-    # Exact order expected by the fitted estimator.
-    return pd.DataFrame(
-        [{f: values[f] for f in expected_features}],
-        columns=expected_features,
-    )
+     return pd.DataFrame([{f: values[f] for f in expected_features}])
 
 def get_classes(model):
     classes = getattr(model, "classes_", None)

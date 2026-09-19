@@ -1,8 +1,8 @@
-streamlit
-pandas
-numpy
+streamlit==1.49.1
+pandas==2.2.3
+numpy==2.0.2
 scikit-learn==1.6.1
-joblib
-imbalanced-learn
+joblib==1.5.2
+imbalanced-learn==0.13.0
 google-genai
 openpyxl

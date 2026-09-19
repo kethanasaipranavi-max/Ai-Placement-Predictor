@@ -101,7 +101,7 @@ def get_branch_skills(branch):
 
 # UG degree list intentionally excludes BCA/BBA/BCom/BA from the UG
 # specialization/major list. Those are degree choices, not branch choices.
-UG_DEGREES = ["BE", "BTech", "BSc", "Other"]
+UG_DEGREES = ["BE", "BTech", "BSc", "BCA", "BBA", "BCom", "BA", "Other"]
 
 UG_SPECIALIZATIONS = [
     "Computer Science",
@@ -161,7 +161,7 @@ UG_SPECIALIZATIONS = [
 # available in PG Specialization. BCA/BBA/BCom/BA are included here because
 # they were explicitly requested for the PG specialization dropdown, while
 # they are not present in the UG specialization dropdown.
-PG_SPECIALIZATIONS = UG_SPECIALIZATIONS + ["BCA", "BBA", "BCom", "BA"]
+PG_SPECIALIZATIONS = UG_SPECIALIZATIONS.copy()
 
 PG_DEGREES = ["MTech", "ME", "MSc", "MCA", "MBA", "MCom", "MA", "MS", "MPhil", "Other"]
 
@@ -1078,7 +1078,7 @@ def build_builtin_career_report(student, prediction_context=None):
         f"{ug} Data / Process Analysis Project",
         f"{ug} Research or Industry Case Study",
     ])
-     gaps = [name for name, score in weakest if score <= 6]
+    gaps = [name for name, score in weakest if score <= 6]
     gap_text = ", ".join(gaps) if gaps else "No major branch-skill gap was identified from the selected ratings."
     strength_text = ", ".join(f"{name} ({score}/10)" for name, score in strongest)
     pg_text = f"PG specialization: {pg}" if pg else "No PG specialization selected."

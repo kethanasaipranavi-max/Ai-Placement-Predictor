@@ -1080,7 +1080,7 @@ def build_builtin_career_report(student, prediction_context=None):
         f"{ug} Research or Industry Case Study",
     ])
 
-     gaps = [name for name, score in weakest if score <= 6]
+    gaps = [name for name, score in weakest if score <= 6]
     gap_text = ", ".join(gaps) if gaps else "No major branch-skill gap was identified from the selected ratings."
     strength_text = ", ".join(f"{name} ({score}/10)" for name, score in strongest)
     pg_text = f"PG specialization: {pg}" if pg else "No PG specialization selected."

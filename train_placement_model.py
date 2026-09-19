@@ -1,79 +1,56 @@
 """
 AI Student Placement Predictor
-Generic Placement Model Training Script
+Training Pipeline - Large Placement Dataset
 
-This script supports multiple academic branches using a common ML schema.
+Expected source:
+Kaggle Student Placement Prediction dataset
+8,000 training records + 2,000 test records.
 
-Expected real dataset file, if available:
-    placement_training_data.csv
-
-Required columns:
-    age
-    gender
-    ug_degree
-    ug_branch
-    ug_cgpa
-    backlogs
-    internships
-    projects
-    certifications
-    coding_skills
-    communication_skills
-    aptitude_score
-    domain_skill_1
-    domain_skill_2
-    domain_skill_3
-    domain_skill_4
-    domain_skill_5
-    placed
-
-If placement_training_data.csv is not present, the script creates a
-synthetic demonstration dataset. Synthetic results must NOT be interpreted
-as real-world employment probabilities.
+The trained model is intentionally limited to features that
+the Streamlit application actually collects.
 """
 
 import os
+import re
 import warnings
-
 import joblib
 import numpy as np
 import pandas as pd
 
 from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.metrics import (
     accuracy_score,
-    classification_report,
-    confusion_matrix,
-    f1_score,
     precision_score,
     recall_score,
+    f1_score,
     roc_auc_score,
+    confusion_matrix,
+    classification_report,
 )
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.calibration import CalibratedClassifierCV
 
 warnings.filterwarnings("ignore")
 
-# ============================================================
-# FILES
-# ============================================================
+RANDOM_STATE = 42
 
-DATA_FILE = "placement_training_data.csv"
+# ============================================================
+# OUTPUT FILES
+# ============================================================
 
 MODEL_FILE = "placement_prediction_final.pkl"
 FEATURE_FILE = "placement_feature_names_final.pkl"
 METADATA_FILE = "placement_model_metadata.pkl"
-RULE_FILE = "recommendation_rules.pkl"
-
-RANDOM_STATE = 42
+RULES_FILE = "recommendation_rules.pkl"
 
 
 # ============================================================
-# COMMON MODEL FEATURES
+# FEATURES USED BY STREAMLIT
 # ============================================================
 
 NUMERIC_FEATURES = [
@@ -99,150 +76,135 @@ CATEGORICAL_FEATURES = [
     "ug_branch",
 ]
 
-FEATURE_NAMES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+MODEL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 TARGET = "placed"
 
 
 # ============================================================
-# SUPPORTED BRANCHES
+# BRANCH SKILLS
 # ============================================================
 
-BRANCHES = [
-    "Computer Science",
-    "Information Technology",
-    "Data Science",
-    "Artificial Intelligence",
-    "Machine Learning",
-    "Cyber Security",
-    "Software Engineering",
-    "Computer Applications",
-    "Mechanical Engineering",
-    "Automobile Engineering",
-    "Production Engineering",
-    "Industrial Engineering",
-    "Aeronautical Engineering",
-    "Aerospace Engineering",
-    "Electrical Engineering",
-    "Electronics Engineering",
-    "Electronics and Communication Engineering",
-    "Biomedical Engineering",
-    "Civil Engineering",
-    "Chemical Engineering",
-    "Mathematics",
-    "Statistics",
-    "Physics",
-    "Chemistry",
-    "Environmental Science",
-    "Biotechnology",
-    "Microbiology",
-    "Biochemistry",
-    "Biological Sciences",
-    "Life Sciences",
-    "Genetics",
-    "Botany",
-    "Zoology",
-    "Food Science and Nutrition",
-    "Food Technology",
-    "Nutrition and Dietetics",
-    "Economics",
-    "Commerce",
-    "Business Administration",
-    "Finance",
-    "Accounting",
-    "Management",
-    "Marketing",
-    "Human Resources",
-    "Psychology",
-    "English",
-    "Political Science",
-    "Sociology",
-    "History",
-    "Public Administration",
-    "Other",
-]
-
-
-DEGREES = [
-    "BE",
-    "BTech",
-    "BSc",
-    "BCA",
-    "BBA",
-    "BCom",
-    "BA",
-    "Other",
-]
-
-
-GENDERS = [
-    "Male",
-    "Female",
-    "Other",
-]
-
-
-# ============================================================
-# BRANCH EFFECTS
-# ============================================================
-
-# These values are ONLY used when generating the synthetic
-# demonstration dataset.
-#
-# They are not presented as real-world placement statistics.
-
-BRANCH_EFFECTS = {
-    "Computer Science": 0.35,
-    "Information Technology": 0.30,
-    "Data Science": 0.30,
-    "Artificial Intelligence": 0.32,
-    "Machine Learning": 0.32,
-    "Cyber Security": 0.28,
-    "Software Engineering": 0.32,
-    "Computer Applications": 0.18,
-    "Mechanical Engineering": 0.08,
-    "Automobile Engineering": 0.05,
-    "Production Engineering": 0.04,
-    "Industrial Engineering": 0.06,
-    "Aeronautical Engineering": 0.10,
-    "Aerospace Engineering": 0.12,
-    "Electrical Engineering": 0.12,
-    "Electronics Engineering": 0.14,
-    "Electronics and Communication Engineering": 0.16,
-    "Biomedical Engineering": 0.04,
-    "Civil Engineering": 0.02,
-    "Chemical Engineering": 0.04,
-    "Mathematics": 0.08,
-    "Statistics": 0.12,
-    "Physics": 0.04,
-    "Chemistry": 0.02,
-    "Environmental Science": 0.00,
-    "Biotechnology": 0.02,
-    "Microbiology": 0.00,
-    "Biochemistry": 0.02,
-    "Biological Sciences": -0.02,
-    "Life Sciences": 0.00,
-    "Genetics": 0.02,
-    "Botany": -0.04,
-    "Zoology": -0.04,
-    "Food Science and Nutrition": 0.00,
-    "Food Technology": 0.02,
-    "Nutrition and Dietetics": 0.00,
-    "Economics": 0.08,
-    "Commerce": 0.06,
-    "Business Administration": 0.08,
-    "Finance": 0.12,
-    "Accounting": 0.08,
-    "Management": 0.08,
-    "Marketing": 0.06,
-    "Human Resources": 0.04,
-    "Psychology": 0.02,
-    "English": -0.02,
-    "Political Science": -0.02,
-    "Sociology": -0.02,
-    "History": -0.04,
-    "Public Administration": 0.00,
-    "Other": 0.00,
+BRANCH_SKILLS = {
+    "Computer Science": [
+        "Programming",
+        "Data Structures & Algorithms",
+        "Databases",
+        "Software Development",
+        "Problem Solving",
+    ],
+    "Information Technology": [
+        "Programming",
+        "Networking",
+        "Databases",
+        "Cloud Computing",
+        "System Administration",
+    ],
+    "Data Science": [
+        "Python / Programming",
+        "Statistics",
+        "Data Analysis",
+        "Machine Learning",
+        "Data Visualization",
+    ],
+    "Artificial Intelligence": [
+        "Programming",
+        "Machine Learning",
+        "Deep Learning",
+        "Mathematics",
+        "Data Analysis",
+    ],
+    "Machine Learning": [
+        "Python",
+        "Machine Learning",
+        "Statistics",
+        "Deep Learning",
+        "Data Processing",
+    ],
+    "Cyber Security": [
+        "Networking",
+        "Cyber Security Concepts",
+        "Linux",
+        "Security Tools",
+        "Ethical Hacking",
+    ],
+    "Software Engineering": [
+        "Programming",
+        "Software Design",
+        "Databases",
+        "Web Development",
+        "Problem Solving",
+    ],
+    "Computer Applications": [
+        "Programming",
+        "Databases",
+        "Web Development",
+        "Software Applications",
+        "Problem Solving",
+    ],
+    "Mechanical Engineering": [
+        "CAD / Design",
+        "Thermodynamics",
+        "Manufacturing",
+        "Machine Design",
+        "Production Processes",
+    ],
+    "Electrical Engineering": [
+        "Circuit Analysis",
+        "Power Systems",
+        "Control Systems",
+        "PLC / Automation",
+        "Electrical Design",
+    ],
+    "Civil Engineering": [
+        "Structural Engineering",
+        "AutoCAD",
+        "Surveying",
+        "Construction Management",
+        "Quantity Estimation",
+    ],
+    "Electronics Engineering": [
+        "Circuit Design",
+        "Embedded Systems",
+        "Digital Electronics",
+        "Microcontrollers",
+        "Communication Systems",
+    ],
+    "Electronics and Communication Engineering": [
+        "Circuit Design",
+        "Embedded Systems",
+        "Digital Electronics",
+        "Communication Systems",
+        "Signal Processing",
+    ],
+    "Commerce": [
+        "Accounting",
+        "Taxation",
+        "Financial Analysis",
+        "Auditing",
+        "Business Knowledge",
+    ],
+    "Finance": [
+        "Financial Analysis",
+        "Accounting",
+        "Investment Analysis",
+        "Financial Modeling",
+        "Banking Knowledge",
+    ],
+    "Business Administration": [
+        "Business Strategy",
+        "Marketing",
+        "Finance",
+        "Communication",
+        "Management",
+    ],
+    "Other": [
+        "Technical Knowledge",
+        "Problem Solving",
+        "Communication",
+        "Analytical Skills",
+        "Professional Skills",
+    ],
 }
 
 
@@ -250,334 +212,763 @@ BRANCH_EFFECTS = {
 # HELPERS
 # ============================================================
 
-def sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+def normalize_name(name):
+    """Normalize a column name for matching."""
+    name = str(name).strip().lower()
+    name = name.replace("&", "and")
+    name = re.sub(r"[^a-z0-9]+", "_", name)
+    return name.strip("_")
 
 
-def make_one_hot_encoder():
+def normalized_columns(df):
+    """Create normalized column mapping."""
+    return {
+        normalize_name(col): col
+        for col in df.columns
+    }
+
+
+def find_column(df, aliases, required=False):
     """
-    Handles compatibility between different scikit-learn versions.
+    Find a source column from a list of possible names.
     """
-    try:
-        return OneHotEncoder(
-            handle_unknown="ignore",
-            sparse_output=False,
+    mapping = normalized_columns(df)
+
+    # Exact normalized match
+    for alias in aliases:
+        key = normalize_name(alias)
+        if key in mapping:
+            return mapping[key]
+
+    # Partial match
+    for alias in aliases:
+        key = normalize_name(alias)
+
+        for normalized, original in mapping.items():
+            if key in normalized or normalized in key:
+                return original
+
+    if required:
+        raise ValueError(
+            f"Could not find required column.\n"
+            f"Possible names: {aliases}\n"
+            f"Available columns:\n{list(df.columns)}"
         )
-    except TypeError:
-        return OneHotEncoder(
-            handle_unknown="ignore",
-            sparse=False,
-        )
+
+    return None
+
+
+def numeric_from_column(df, column, default=0):
+    """
+    Convert a source column to numeric safely.
+    """
+    if column is None:
+        return pd.Series(default, index=df.index, dtype=float)
+
+    values = (
+        df[column]
+        .astype(str)
+        .str.replace("%", "", regex=False)
+        .str.strip()
+    )
+
+    return pd.to_numeric(values, errors="coerce")
+
+
+def scale_to_10(series, source_min=None, source_max=None):
+    """
+    Convert arbitrary numeric values to approximately 0-10.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+
+    if source_min is not None:
+        s = s.clip(lower=source_min)
+
+    if source_max is not None:
+        s = s.clip(upper=source_max)
+
+    current_min = s.min()
+    current_max = s.max()
+
+    if pd.isna(current_min) or pd.isna(current_max):
+        return pd.Series(5.0, index=series.index)
+
+    if current_max == current_min:
+        return pd.Series(5.0, index=series.index)
+
+    result = (s - current_min) / (current_max - current_min) * 10.0
+
+    return result.clip(0, 10)
+
+
+def map_gender(value):
+    value = str(value).strip().lower()
+
+    if value in ["male", "m", "man", "1"]:
+        return "Male"
+
+    if value in ["female", "f", "woman", "2"]:
+        return "Female"
+
+    return "Other"
+
+
+def map_degree(value):
+    value = str(value).strip().lower()
+
+    if "b.tech" in value or "btech" in value:
+        return "BTech"
+
+    if "b.e" in value or value in ["be", "bachelor of engineering"]:
+        return "BE"
+
+    if "bca" in value:
+        return "BCA"
+
+    if "b.sc" in value or "bsc" in value:
+        return "BSc"
+
+    if "bba" in value:
+        return "BBA"
+
+    if "b.com" in value or "bcom" in value:
+        return "BCom"
+
+    if value == "ba" or "bachelor of arts" in value:
+        return "BA"
+
+    return "Other"
+
+
+def clean_branch(value):
+    """
+    Convert common branch names to the names expected by Streamlit.
+    """
+    value = str(value).strip().lower()
+
+    replacements = {
+        "cse": "Computer Science",
+        "computer science": "Computer Science",
+        "computer science engineering": "Computer Science",
+
+        "it": "Information Technology",
+        "information technology": "Information Technology",
+
+        "ds": "Data Science",
+        "data science": "Data Science",
+
+        "ai": "Artificial Intelligence",
+        "artificial intelligence": "Artificial Intelligence",
+
+        "ml": "Machine Learning",
+        "machine learning": "Machine Learning",
+
+        "cyber security": "Cyber Security",
+        "cybersecurity": "Cyber Security",
+
+        "software engineering": "Software Engineering",
+        "computer applications": "Computer Applications",
+
+        "me": "Mechanical Engineering",
+        "mechanical": "Mechanical Engineering",
+        "mechanical engineering": "Mechanical Engineering",
+
+        "ee": "Electrical Engineering",
+        "electrical": "Electrical Engineering",
+        "electrical engineering": "Electrical Engineering",
+
+        "ece": "Electronics and Communication Engineering",
+        "electronics and communication": "Electronics and Communication Engineering",
+        "electronics and communication engineering":
+            "Electronics and Communication Engineering",
+
+        "electronics": "Electronics Engineering",
+        "electronics engineering": "Electronics Engineering",
+
+        "civil": "Civil Engineering",
+        "civil engineering": "Civil Engineering",
+
+        "commerce": "Commerce",
+        "finance": "Finance",
+        "business administration": "Business Administration",
+    }
+
+    if value in replacements:
+        return replacements[value]
+
+    for key, result in replacements.items():
+        if key in value:
+            return result
+
+    return "Other"
 
 
 # ============================================================
-# SYNTHETIC DATASET
+# FIND TRAINING FILE
 # ============================================================
 
-def generate_synthetic_dataset(n_samples=5000, random_state=RANDOM_STATE):
+def locate_training_file():
     """
-    Generate a synthetic demonstration dataset.
-
-    IMPORTANT:
-    This is NOT real placement data.
-
-    It exists so the complete application can be trained and tested
-    before a real historical placement dataset is available.
+    Locate the uploaded Kaggle training CSV.
     """
-
-    rng = np.random.default_rng(random_state)
-
-    rows = []
-
-    for _ in range(n_samples):
-
-        age = int(np.clip(rng.normal(22, 1.5), 18, 30))
-
-        gender = rng.choice(
-            GENDERS,
-            p=[0.50, 0.48, 0.02],
-        )
-
-        ug_degree = rng.choice(
-            DEGREES,
-            p=[
-                0.20,  # BE
-                0.28,  # BTech
-                0.15,  # BSc
-                0.10,  # BCA
-                0.06,  # BBA
-                0.07,  # BCom
-                0.08,  # BA
-                0.06,  # Other
-            ],
-        )
-
-        ug_branch = rng.choice(BRANCHES)
-
-        ug_cgpa = float(
-            np.clip(
-                rng.normal(7.2, 1.1),
-                4.0,
-                10.0,
-            )
-        )
-
-        # Most students have zero or one backlog.
-        backlogs = int(
-            np.clip(
-                rng.poisson(0.65),
-                0,
-                6,
-            )
-        )
-
-        internships = int(
-            np.clip(
-                rng.poisson(1.0),
-                0,
-                4,
-            )
-        )
-
-        projects = int(
-            np.clip(
-                rng.poisson(2.0),
-                0,
-                7,
-            )
-        )
-
-        certifications = int(
-            np.clip(
-                rng.poisson(1.7),
-                0,
-                7,
-            )
-        )
-
-        coding_skills = int(
-            np.clip(
-                np.rint(rng.normal(5.8, 1.9)),
-                1,
-                10,
-            )
-        )
-
-        communication_skills = int(
-            np.clip(
-                np.rint(rng.normal(6.0, 1.7)),
-                1,
-                10,
-            )
-        )
-
-        aptitude_score = float(
-            np.clip(
-                rng.normal(65, 15),
-                20,
-                100,
-            )
-        )
-
-        domain_skills = np.clip(
-            np.rint(rng.normal(6.0, 1.8, size=5)),
-            1,
-            10,
-        ).astype(int)
-
-        domain_skill_1 = int(domain_skills[0])
-        domain_skill_2 = int(domain_skills[1])
-        domain_skill_3 = int(domain_skills[2])
-        domain_skill_4 = int(domain_skills[3])
-        domain_skill_5 = int(domain_skills[4])
-
-        domain_average = float(np.mean(domain_skills))
-
-        branch_effect = BRANCH_EFFECTS.get(
-            ug_branch,
-            0.0,
-        )
-
-        # ----------------------------------------------------
-        # Synthetic latent placement score
-        # ----------------------------------------------------
-        #
-        # The weights are deliberately distributed across many
-        # features so one slider does not completely dominate.
-        #
-        # Again: these are synthetic assumptions, NOT real-world
-        # placement coefficients.
-        #
-        latent_score = (
-            -4.7
-            + 0.62 * (ug_cgpa - 7.0)
-            - 0.48 * backlogs
-            + 0.27 * internships
-            + 0.17 * projects
-            + 0.08 * certifications
-            + 0.13 * (coding_skills - 5)
-            + 0.12 * (communication_skills - 5)
-            + 0.018 * (aptitude_score - 50)
-            + 0.10 * (domain_average - 5)
-            + branch_effect
-            + rng.normal(0, 0.75)
-        )
-
-        probability = float(sigmoid(latent_score))
-
-        placed = int(
-            rng.random() < probability
-        )
-
-        rows.append(
-            {
-                "age": age,
-                "gender": gender,
-                "ug_degree": ug_degree,
-                "ug_branch": ug_branch,
-                "ug_cgpa": round(ug_cgpa, 2),
-                "backlogs": backlogs,
-                "internships": internships,
-                "projects": projects,
-                "certifications": certifications,
-                "coding_skills": coding_skills,
-                "communication_skills": communication_skills,
-                "aptitude_score": round(aptitude_score, 1),
-                "domain_skill_1": domain_skill_1,
-                "domain_skill_2": domain_skill_2,
-                "domain_skill_3": domain_skill_3,
-                "domain_skill_4": domain_skill_4,
-                "domain_skill_5": domain_skill_5,
-                "placed": placed,
-            }
-        )
-
-    return pd.DataFrame(rows)
-
-
-# ============================================================
-# REAL DATA VALIDATION
-# ============================================================
-
-def validate_dataset(df):
-    required_columns = FEATURE_NAMES + [TARGET]
-
-    missing = [
-        column
-        for column in required_columns
-        if column not in df.columns
+    preferred_names = [
+        "train.csv",
+        "placement_train.csv",
+        "student_placement_train.csv",
+        "student_placement_prediction_train.csv",
     ]
 
-    if missing:
-        raise ValueError(
-            "The dataset is missing required column(s):\n"
-            + "\n".join(f"- {column}" for column in missing)
+    for name in preferred_names:
+        if os.path.exists(name):
+            return name
+
+    csv_files = [
+        f for f in os.listdir(".")
+        if f.lower().endswith(".csv")
+    ]
+
+    if len(csv_files) == 1:
+        return csv_files[0]
+
+    if not csv_files:
+        raise FileNotFoundError(
+            "\nNo CSV training dataset found.\n"
+            "Upload the Kaggle training CSV into Colab and run again."
         )
 
-    df = df.copy()
+    print("Multiple CSV files found:")
+    for f in csv_files:
+        print(" -", f)
+
+    # Prefer a file containing "train"
+    train_candidates = [
+        f for f in csv_files
+        if "train" in f.lower()
+    ]
+
+    if len(train_candidates) == 1:
+        return train_candidates[0]
+
+    raise FileNotFoundError(
+        "\nCould not automatically choose the training CSV.\n"
+        f"Available CSV files: {csv_files}\n"
+        "Rename the correct training file to train.csv."
+    )
+
+
+# ============================================================
+# PREPARE DATASET
+# ============================================================
+
+def prepare_dataset(raw_df):
+    print("\nPreparing dataset...")
+    print("Original shape:", raw_df.shape)
+
+    df = pd.DataFrame(index=raw_df.index)
 
     # --------------------------------------------------------
-    # Numeric conversion
+    # AGE
     # --------------------------------------------------------
 
-    for column in NUMERIC_FEATURES:
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce",
+    age_col = find_column(
+        raw_df,
+        ["age", "student_age"],
+        required=False
+    )
+
+    df["age"] = numeric_from_column(
+        raw_df,
+        age_col,
+        default=21
+    ).fillna(21).clip(17, 60)
+
+    # --------------------------------------------------------
+    # GENDER
+    # --------------------------------------------------------
+
+    gender_col = find_column(
+        raw_df,
+        ["gender", "sex"],
+        required=False
+    )
+
+    if gender_col:
+        df["gender"] = raw_df[gender_col].apply(map_gender)
+    else:
+        df["gender"] = "Other"
+
+    # --------------------------------------------------------
+    # DEGREE
+    # --------------------------------------------------------
+
+    degree_col = find_column(
+        raw_df,
+        [
+            "degree",
+            "ug_degree",
+            "education",
+            "highest_degree"
+        ],
+        required=False
+    )
+
+    if degree_col:
+        df["ug_degree"] = raw_df[degree_col].apply(map_degree)
+    else:
+        df["ug_degree"] = "Other"
+
+    # --------------------------------------------------------
+    # BRANCH
+    # --------------------------------------------------------
+
+    branch_col = find_column(
+        raw_df,
+        [
+            "branch",
+            "ug_branch",
+            "stream",
+            "specialization",
+            "department",
+            "field_of_study"
+        ],
+        required=False
+    )
+
+    if branch_col:
+        df["ug_branch"] = raw_df[branch_col].apply(clean_branch)
+    else:
+        df["ug_branch"] = "Other"
+
+    # --------------------------------------------------------
+    # CGPA
+    # --------------------------------------------------------
+
+    cgpa_col = find_column(
+        raw_df,
+        [
+            "cgpa",
+            "ug_cgpa",
+            "academic_cgpa",
+            "gpa"
+        ],
+        required=True
+    )
+
+    df["ug_cgpa"] = numeric_from_column(
+        raw_df,
+        cgpa_col
+    )
+
+    # Handle percentage-like CGPA if necessary
+    if df["ug_cgpa"].median(skipna=True) > 10:
+        df["ug_cgpa"] = df["ug_cgpa"] / 10.0
+
+    df["ug_cgpa"] = df["ug_cgpa"].clip(0, 10)
+
+    # --------------------------------------------------------
+    # BACKLOGS
+    # --------------------------------------------------------
+
+    backlog_col = find_column(
+        raw_df,
+        [
+            "backlogs",
+            "backlog",
+            "academic_backlogs",
+            "number_of_backlogs"
+        ],
+        required=False
+    )
+
+    df["backlogs"] = numeric_from_column(
+        raw_df,
+        backlog_col,
+        default=0
+    ).fillna(0).clip(0, 20)
+
+    # --------------------------------------------------------
+    # INTERNSHIPS
+    # --------------------------------------------------------
+
+    internship_col = find_column(
+        raw_df,
+        [
+            "internships",
+            "internship",
+            "internships_count",
+            "number_of_internships"
+        ],
+        required=False
+    )
+
+    df["internships"] = numeric_from_column(
+        raw_df,
+        internship_col,
+        default=0
+    ).fillna(0).clip(0, 20)
+
+    # --------------------------------------------------------
+    # PROJECTS
+    # --------------------------------------------------------
+
+    project_col = find_column(
+        raw_df,
+        [
+            "projects",
+            "project",
+            "projects_count",
+            "number_of_projects"
+        ],
+        required=False
+    )
+
+    df["projects"] = numeric_from_column(
+        raw_df,
+        project_col,
+        default=0
+    ).fillna(0).clip(0, 30)
+
+    # --------------------------------------------------------
+    # CERTIFICATIONS
+    # --------------------------------------------------------
+
+    certification_col = find_column(
+        raw_df,
+        [
+            "certifications",
+            "certification",
+            "certifications_count",
+            "number_of_certifications"
+        ],
+        required=False
+    )
+
+    df["certifications"] = numeric_from_column(
+        raw_df,
+        certification_col,
+        default=0
+    ).fillna(0).clip(0, 30)
+
+    # --------------------------------------------------------
+    # CODING SKILLS
+    # --------------------------------------------------------
+
+    coding_col = find_column(
+        raw_df,
+        [
+            "coding",
+            "coding_skill",
+            "coding_skill_score",
+            "coding_ability",
+            "programming_skill"
+        ],
+        required=False
+    )
+
+    if coding_col:
+        coding_raw = numeric_from_column(raw_df, coding_col)
+        df["coding_skills"] = scale_to_10(coding_raw)
+    else:
+        df["coding_skills"] = 5.0
+
+    # --------------------------------------------------------
+    # COMMUNICATION
+    # --------------------------------------------------------
+
+    communication_col = find_column(
+        raw_df,
+        [
+            "communication",
+            "communication_skill",
+            "communication_skill_score",
+            "communication_skills"
+        ],
+        required=False
+    )
+
+    if communication_col:
+        communication_raw = numeric_from_column(
+            raw_df,
+            communication_col
+        )
+        df["communication_skills"] = scale_to_10(
+            communication_raw
+        )
+    else:
+        df["communication_skills"] = 5.0
+
+    # --------------------------------------------------------
+    # APTITUDE
+    # --------------------------------------------------------
+
+    aptitude_col = find_column(
+        raw_df,
+        [
+            "aptitude",
+            "aptitude_score",
+            "aptitude_test",
+            "aptitude_test_score"
+        ],
+        required=False
+    )
+
+    if aptitude_col:
+        aptitude_raw = numeric_from_column(
+            raw_df,
+            aptitude_col
         )
 
+        # Keep as 0-100 if it already looks like percentage
+        if aptitude_raw.median(skipna=True) <= 10:
+            aptitude_raw = aptitude_raw * 10
+
+        df["aptitude_score"] = aptitude_raw.clip(0, 100)
+    else:
+        df["aptitude_score"] = 50.0
+
     # --------------------------------------------------------
-    # Categorical cleanup
+    # TECHNICAL SKILL
     # --------------------------------------------------------
 
-    for column in CATEGORICAL_FEATURES:
-        df[column] = (
-            df[column]
-            .astype(str)
-            .str.strip()
+    technical_col = find_column(
+        raw_df,
+        [
+            "technical_skill",
+            "technical_skills",
+            "technical_skill_score",
+            "technical_knowledge",
+            "technical_ability"
+        ],
+        required=False
+    )
+
+    if technical_col:
+        technical = scale_to_10(
+            numeric_from_column(raw_df, technical_col)
+        )
+    else:
+        technical = df["coding_skills"].copy()
+
+    # --------------------------------------------------------
+    # OTHER SKILLS
+    # --------------------------------------------------------
+
+    logical_col = find_column(
+        raw_df,
+        [
+            "logical_reasoning",
+            "logical_reasoning_score",
+            "reasoning_score"
+        ],
+        required=False
+    )
+
+    if logical_col:
+        logical = scale_to_10(
+            numeric_from_column(raw_df, logical_col)
+        )
+    else:
+        logical = scale_to_10(df["aptitude_score"])
+
+    hackathon_col = find_column(
+        raw_df,
+        [
+            "hackathons",
+            "hackathon",
+            "hackathon_count"
+        ],
+        required=False
+    )
+
+    if hackathon_col:
+        hackathons = scale_to_10(
+            numeric_from_column(raw_df, hackathon_col)
+        )
+    else:
+        hackathons = pd.Series(
+            3.0,
+            index=raw_df.index
         )
 
+    github_col = find_column(
+        raw_df,
+        [
+            "github",
+            "github_activity",
+            "github_repos",
+            "github_repositories"
+        ],
+        required=False
+    )
+
+    if github_col:
+        github = scale_to_10(
+            numeric_from_column(raw_df, github_col)
+        )
+    else:
+        github = pd.Series(
+            3.0,
+            index=raw_df.index
+        )
+
+    leadership_col = find_column(
+        raw_df,
+        [
+            "leadership",
+            "leadership_score"
+        ],
+        required=False
+    )
+
+    if leadership_col:
+        leadership = scale_to_10(
+            numeric_from_column(raw_df, leadership_col)
+        )
+    else:
+        leadership = df["communication_skills"].copy()
+
     # --------------------------------------------------------
-    # Target conversion
+    # CREATE FIVE DOMAIN SKILLS
+    #
+    # These are kept compatible with your Streamlit UI.
+    # They are constructed from technical / coding / reasoning /
+    # GitHub / practical experience signals available in the
+    # larger dataset.
     # --------------------------------------------------------
 
-    if df[TARGET].dtype == object:
+    df["domain_skill_1"] = (
+        0.50 * df["coding_skills"]
+        + 0.30 * technical
+        + 0.20 * github
+    )
 
-        target_map = {
-            "1": 1,
-            "0": 0,
-            "true": 1,
-            "false": 0,
-            "yes": 1,
-            "no": 0,
-            "placed": 1,
-            "not placed": 0,
-            "not_placed": 0,
-            "y": 1,
-            "n": 0,
-        }
+    df["domain_skill_2"] = (
+        0.50 * logical
+        + 0.30 * df["aptitude_score"] / 10
+        + 0.20 * technical
+    )
 
-        df[TARGET] = (
-            df[TARGET]
+    df["domain_skill_3"] = (
+        0.50 * technical
+        + 0.30 * df["coding_skills"]
+        + 0.20 * hackathons
+    )
+
+    df["domain_skill_4"] = (
+        0.40 * github
+        + 0.30 * hackathons
+        + 0.30 * leadership
+    )
+
+    df["domain_skill_5"] = (
+        0.40 * df["communication_skills"]
+        + 0.30 * technical
+        + 0.30 * logical
+    )
+
+    for col in [
+        "domain_skill_1",
+        "domain_skill_2",
+        "domain_skill_3",
+        "domain_skill_4",
+        "domain_skill_5",
+    ]:
+        df[col] = df[col].clip(0, 10)
+
+    # --------------------------------------------------------
+    # TARGET
+    # --------------------------------------------------------
+
+    target_col = find_column(
+        raw_df,
+        [
+            "placed",
+            "placement",
+            "placement_status",
+            "placement_outcome",
+            "is_placed"
+        ],
+        required=True
+    )
+
+    target = raw_df[target_col]
+
+    if target.dtype == object:
+        target = (
+            target
             .astype(str)
             .str.strip()
             .str.lower()
-            .map(target_map)
+            .map({
+                "1": 1,
+                "0": 0,
+                "yes": 1,
+                "no": 0,
+                "placed": 1,
+                "not placed": 0,
+                "true": 1,
+                "false": 0,
+            })
+        )
+    else:
+        target = pd.to_numeric(
+            target,
+            errors="coerce"
         )
 
-    df[TARGET] = pd.to_numeric(
-        df[TARGET],
-        errors="coerce",
+    target = target.where(
+        target.isin([0, 1])
     )
 
-    # --------------------------------------------------------
-    # Remove invalid target rows
-    # --------------------------------------------------------
+    valid = target.notna()
 
-    df = df.dropna(
-        subset=[TARGET]
-    )
-
-    df[TARGET] = df[TARGET].astype(int)
+    df = df.loc[valid].copy()
+    target = target.loc[valid].astype(int)
 
     # --------------------------------------------------------
-    # Keep only valid binary target values
+    # CLEAN
     # --------------------------------------------------------
 
-    df = df[
-        df[TARGET].isin([0, 1])
-    ].copy()
-
-    if len(df) < 100:
-        raise ValueError(
-            "The dataset contains fewer than 100 valid rows."
+    for col in NUMERIC_FEATURES:
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
         )
 
-    if df[TARGET].nunique() < 2:
-        raise ValueError(
-            "The 'placed' column must contain both 0 and 1 classes."
+    for col in CATEGORICAL_FEATURES:
+        df[col] = (
+            df[col]
+            .astype(str)
+            .replace("nan", "Other")
+            .fillna("Other")
         )
 
-    return df
+    print("\nPrepared dataset:")
+    print("Rows:", len(df))
+    print("Features:", len(MODEL_FEATURES))
+    print("\nTarget distribution:")
+    print(target.value_counts().sort_index())
+
+    print("\nPlacement rate:")
+    print(f"{target.mean() * 100:.2f}%")
+
+    return df, target
 
 
 # ============================================================
-# BUILD MODEL
+# TRAIN MODELS
 # ============================================================
 
-def build_model():
-
+def build_preprocessor():
     numeric_pipeline = Pipeline(
         steps=[
             (
                 "imputer",
-                SimpleImputer(
-                    strategy="median"
-                ),
+                SimpleImputer(strategy="median")
             ),
             (
                 "scaler",
-                StandardScaler(),
+                StandardScaler()
             ),
         ]
     )
@@ -586,18 +977,18 @@ def build_model():
         steps=[
             (
                 "imputer",
-                SimpleImputer(
-                    strategy="most_frequent"
-                ),
+                SimpleImputer(strategy="most_frequent")
             ),
             (
                 "onehot",
-                make_one_hot_encoder(),
+                OneHotEncoder(
+                    handle_unknown="ignore"
+                )
             ),
         ]
     )
 
-    preprocessor = ColumnTransformer(
+    return ColumnTransformer(
         transformers=[
             (
                 "numeric",
@@ -609,138 +1000,190 @@ def build_model():
                 categorical_pipeline,
                 CATEGORICAL_FEATURES,
             ),
-        ],
-        remainder="drop",
+        ]
     )
 
-    base_model = LogisticRegression(
-        max_iter=3000,
-        class_weight="balanced",
-        C=0.7,
-        solver="lbfgs",
-        random_state=RANDOM_STATE,
-    )
 
-    calibrated_model = CalibratedClassifierCV(
-        estimator=base_model,
-        method="sigmoid",
-        cv=5,
-    )
+def build_models(preprocessor):
+    models = {}
 
-    model = Pipeline(
+    models["Logistic Regression"] = Pipeline(
         steps=[
             (
                 "preprocessor",
-                preprocessor,
+                preprocessor
             ),
             (
                 "classifier",
-                calibrated_model,
+                LogisticRegression(
+                    max_iter=3000,
+                    class_weight="balanced",
+                    C=0.7,
+                    solver="lbfgs",
+                    random_state=RANDOM_STATE,
+                ),
             ),
         ]
     )
 
-    return model
+    models["Random Forest"] = Pipeline(
+        steps=[
+            (
+                "preprocessor",
+                preprocessor
+            ),
+            (
+                "classifier",
+                RandomForestClassifier(
+                    n_estimators=500,
+                    max_depth=12,
+                    min_samples_leaf=5,
+                    class_weight="balanced_subsample",
+                    random_state=RANDOM_STATE,
+                    n_jobs=-1,
+                ),
+            ),
+        ]
+    )
+
+    # HistGradientBoosting works only with numeric arrays,
+    # so use a separate preprocessing pipeline.
+    hgb_preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "numeric",
+                Pipeline(
+                    steps=[
+                        (
+                            "imputer",
+                            SimpleImputer(
+                                strategy="median"
+                            )
+                        ),
+                        (
+                            "scaler",
+                            StandardScaler()
+                        ),
+                    ]
+                ),
+                NUMERIC_FEATURES,
+            ),
+            (
+                "categorical",
+                Pipeline(
+                    steps=[
+                        (
+                            "imputer",
+                            SimpleImputer(
+                                strategy="most_frequent"
+                            )
+                        ),
+                        (
+                            "onehot",
+                            OneHotEncoder(
+                                handle_unknown="ignore",
+                                sparse_output=False,
+                            )
+                        ),
+                    ]
+                ),
+                CATEGORICAL_FEATURES,
+            ),
+        ]
+    )
+
+    models["HistGradientBoosting"] = Pipeline(
+        steps=[
+            (
+                "preprocessor",
+                hgb_preprocessor
+            ),
+            (
+                "classifier",
+                HistGradientBoostingClassifier(
+                    max_iter=250,
+                    learning_rate=0.05,
+                    max_leaf_nodes=15,
+                    l2_regularization=1.0,
+                    random_state=RANDOM_STATE,
+                ),
+            ),
+        ]
+    )
+
+    return models
 
 
 # ============================================================
 # EVALUATION
 # ============================================================
 
-def evaluate_model(model, X_test, y_test):
+def evaluate_model(name, model, X_test, y_test):
+    probabilities = model.predict_proba(X_test)[:, 1]
 
-    predictions = model.predict(
-        X_test
-    )
-
-    probabilities = model.predict_proba(
-        X_test
-    )[:, 1]
+    predictions = (
+        probabilities >= 0.5
+    ).astype(int)
 
     accuracy = accuracy_score(
         y_test,
-        predictions,
+        predictions
     )
 
     precision = precision_score(
         y_test,
         predictions,
-        zero_division=0,
+        zero_division=0
     )
 
     recall = recall_score(
         y_test,
         predictions,
-        zero_division=0,
+        zero_division=0
     )
 
     f1 = f1_score(
         y_test,
         predictions,
-        zero_division=0,
+        zero_division=0
     )
 
     roc_auc = roc_auc_score(
         y_test,
-        probabilities,
+        probabilities
     )
 
-    matrix = confusion_matrix(
-        y_test,
-        predictions,
-    )
+    print("\n" + "=" * 60)
+    print(name)
+    print("=" * 60)
 
-    report = classification_report(
+    print(f"Accuracy : {accuracy:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall   : {recall:.4f}")
+    print(f"F1 Score : {f1:.4f}")
+    print(f"ROC-AUC  : {roc_auc:.4f}")
+
+    print("\nConfusion Matrix:")
+    print(confusion_matrix(
         y_test,
-        predictions,
-        zero_division=0,
+        predictions
+    ))
+
+    print("\nClassification Report:")
+    print(
+        classification_report(
+            y_test,
+            predictions,
+            zero_division=0
+        )
     )
 
     return {
-        "accuracy": round(float(accuracy), 4),
-        "precision": round(float(precision), 4),
-        "recall": round(float(recall), 4),
-        "f1": round(float(f1), 4),
-        "roc_auc": round(float(roc_auc), 4),
-        "confusion_matrix": matrix.tolist(),
-        "classification_report": report,
-    }
-
-
-# ============================================================
-# CROSS VALIDATION
-# ============================================================
-
-def calculate_cross_validation_auc(X, y):
-
-    cv = StratifiedKFold(
-        n_splits=5,
-        shuffle=True,
-        random_state=RANDOM_STATE,
-    )
-
-    scores = cross_val_score(
-        build_model(),
-        X,
-        y,
-        cv=cv,
-        scoring="roc_auc",
-        n_jobs=-1,
-    )
-
-    return {
-        "mean_roc_auc": round(
-            float(scores.mean()),
-            4,
-        ),
-        "std_roc_auc": round(
-            float(scores.std()),
-            4,
-        ),
-        "fold_scores": [
-            round(float(score), 4)
-            for score in scores
-        ],
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "roc_auc": roc_auc,
     }
 
 
@@ -749,190 +1192,44 @@ def calculate_cross_validation_auc(X, y):
 # ============================================================
 
 def create_recommendation_rules():
-
     return {
         "cgpa": {
-            "message": (
-                "Work on maintaining or improving CGPA through "
-                "consistent academic preparation and revision."
-            )
+            "threshold": 7.5,
+            "message": "Improve CGPA through consistent academic preparation."
         },
         "backlogs": {
-            "message": (
-                "Prioritize clearing academic backlogs because "
-                "some placement opportunities may have eligibility restrictions."
-            )
+            "threshold": 0,
+            "message": "Clear pending backlogs and maintain academic consistency."
         },
         "internships": {
-            "message": (
-                "Seek relevant internships, industry projects, "
-                "research work, or supervised practical experience."
-            )
+            "threshold": 1,
+            "message": "Complete an internship or practical industry experience."
         },
         "projects": {
-            "message": (
-                "Build practical projects related to your branch "
-                "and target career so that you can demonstrate applied skills."
-            )
+            "threshold": 2,
+            "message": "Build more practical projects and publish strong work."
         },
         "certifications": {
-            "message": (
-                "Consider relevant certifications that strengthen "
-                "your target career direction rather than collecting unrelated certificates."
-            )
+            "threshold": 1,
+            "message": "Add relevant certifications aligned with your target role."
+        },
+        "coding_skills": {
+            "threshold": 6,
+            "message": "Strengthen programming and problem-solving skills."
         },
         "communication_skills": {
-            "message": (
-                "Practice communication, presentations, group discussions, "
-                "technical explanations, and mock interviews."
-            )
+            "threshold": 6,
+            "message": "Practice communication, interviews and presentation skills."
         },
         "aptitude_score": {
-            "message": (
-                "Practice quantitative aptitude, logical reasoning, "
-                "verbal reasoning, and timed problem-solving regularly."
-            )
+            "threshold": 60,
+            "message": "Practice quantitative, logical and verbal aptitude."
+        },
+        "domain_skills": {
+            "threshold": 6,
+            "message": "Strengthen branch-specific technical skills."
         },
     }
-
-
-# ============================================================
-# PRINT DATASET SUMMARY
-# ============================================================
-
-def print_dataset_summary(
-    df,
-    dataset_mode,
-):
-
-    print("\n" + "=" * 70)
-    print("DATASET SUMMARY")
-    print("=" * 70)
-
-    print(
-        f"Training mode : {dataset_mode}"
-    )
-
-    print(
-        f"Rows          : {len(df)}"
-    )
-
-    print(
-        f"Columns       : {len(df.columns)}"
-    )
-
-    print(
-        f"Placed = 1    : {(df[TARGET] == 1).sum()}"
-    )
-
-    print(
-        f"Placed = 0    : {(df[TARGET] == 0).sum()}"
-    )
-
-    print(
-        f"Placement rate: {df[TARGET].mean() * 100:.2f}%"
-    )
-
-    print("\nBranch distribution:")
-
-    branch_counts = (
-        df["ug_branch"]
-        .value_counts()
-        .sort_index()
-    )
-
-    print(
-        branch_counts.to_string()
-    )
-
-
-# ============================================================
-# SAVE ARTIFACTS
-# ============================================================
-
-def save_artifacts(
-    model,
-    metrics,
-    cv_metrics,
-    dataset_mode,
-    dataset_size,
-):
-
-    # --------------------------------------------------------
-    # Model
-    # --------------------------------------------------------
-
-    joblib.dump(
-        model,
-        MODEL_FILE,
-    )
-
-    # --------------------------------------------------------
-    # Feature schema
-    # --------------------------------------------------------
-
-    joblib.dump(
-        FEATURE_NAMES,
-        FEATURE_FILE,
-    )
-
-    # --------------------------------------------------------
-    # Metadata
-    # --------------------------------------------------------
-
-    metadata = {
-        "model_name": (
-            "Calibrated Logistic Regression "
-            "with Standardized Numeric and One-Hot Categorical Features"
-        ),
-        "dataset_mode": dataset_mode,
-        "dataset_size": int(dataset_size),
-        "target_column": TARGET,
-        "feature_names": FEATURE_NAMES,
-        "numeric_features": NUMERIC_FEATURES,
-        "categorical_features": CATEGORICAL_FEATURES,
-        "evaluation_metrics": metrics,
-        "cross_validation": cv_metrics,
-        "random_state": RANDOM_STATE,
-        "probability_note": (
-            "The model probability is an estimated calibrated "
-            "classification probability for the population represented "
-            "by the training data. It is not a guarantee of employment."
-        ),
-        "synthetic_warning": (
-            "Synthetic probabilities are demonstration-only and "
-            "must not be interpreted as real-world placement probabilities."
-            if dataset_mode == "synthetic_demo"
-            else None
-        ),
-        "domain_skill_design": (
-            "domain_skill_1 through domain_skill_5 represent the "
-            "five branch-specific skill ratings. Their labels are "
-            "determined by the application UI based on ug_branch."
-        ),
-        "coding_skill_design": (
-            "coding_skills is an independent feature and is not derived "
-            "from the branch-specific domain skill ratings."
-        ),
-    }
-
-    joblib.dump(
-        metadata,
-        METADATA_FILE,
-    )
-
-    # --------------------------------------------------------
-    # Recommendation rules
-    # --------------------------------------------------------
-
-    rules = create_recommendation_rules()
-
-    joblib.dump(
-        rules,
-        RULE_FILE,
-    )
-
-    return metadata
 
 
 # ============================================================
@@ -941,207 +1238,215 @@ def save_artifacts(
 
 def main():
 
-    print("\n")
     print("=" * 70)
-    print("🎓 AI STUDENT PLACEMENT PREDICTOR")
-    print("GENERIC ALL-BRANCH MODEL TRAINING")
+    print("AI STUDENT PLACEMENT PREDICTOR")
+    print("Large Placement Dataset Training")
     print("=" * 70)
 
     # --------------------------------------------------------
-    # Load real data if available
+    # Locate CSV
     # --------------------------------------------------------
 
-    if os.path.exists(DATA_FILE):
+    data_file = locate_training_file()
 
-        print(
-            f"\nFound real dataset: {DATA_FILE}"
-        )
-
-        df = pd.read_csv(
-            DATA_FILE
-        )
-
-        df = validate_dataset(
-            df
-        )
-
-        dataset_mode = "real_dataset"
-
-    else:
-
-        print(
-            f"\n{DATA_FILE} was not found."
-        )
-
-        print(
-            "Creating a synthetic demonstration dataset..."
-        )
-
-        df = generate_synthetic_dataset(
-            n_samples=5000,
-            random_state=RANDOM_STATE,
-        )
-
-        dataset_mode = "synthetic_demo"
-
-    print_dataset_summary(
-        df,
-        dataset_mode,
-    )
+    print("\nUsing training file:")
+    print(data_file)
 
     # --------------------------------------------------------
-    # Split X / y
+    # Load
     # --------------------------------------------------------
 
-    X = df[
-        FEATURE_NAMES
-    ].copy()
+    raw_df = pd.read_csv(data_file)
 
-    y = df[
-        TARGET
-    ].astype(int)
+    print("\nRaw dataset loaded successfully.")
+    print("Rows:", raw_df.shape[0])
+    print("Columns:", raw_df.shape[1])
+
+    print("\nAvailable columns:")
+    for col in raw_df.columns:
+        print(" -", col)
 
     # --------------------------------------------------------
-    # Train/test split
+    # Prepare
+    # --------------------------------------------------------
+
+    X, y = prepare_dataset(raw_df)
+
+    # --------------------------------------------------------
+    # Split
     # --------------------------------------------------------
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
         test_size=0.20,
-        random_state=RANDOM_STATE,
         stratify=y,
+        random_state=RANDOM_STATE,
     )
 
-    print("\n" + "=" * 70)
-    print("TRAINING")
-    print("=" * 70)
-
-    print(
-        f"Training rows: {len(X_train)}"
-    )
-
-    print(
-        f"Testing rows : {len(X_test)}"
-    )
+    print("\nTrain rows:", len(X_train))
+    print("Test rows :", len(X_test))
 
     # --------------------------------------------------------
-    # Build model
+    # Models
     # --------------------------------------------------------
 
-    model = build_model()
+    preprocessor = build_preprocessor()
+
+    models = build_models(
+        preprocessor
+    )
+
+    results = {}
 
     # --------------------------------------------------------
-    # Fit model
+    # Train and compare
     # --------------------------------------------------------
 
-    print(
-        "\nFitting calibrated logistic regression..."
-    )
+    for name, model in models.items():
 
-    model.fit(
-        X_train,
-        y_train,
-    )
+        print("\n" + "-" * 70)
+        print("Training:", name)
+        print("-" * 70)
 
-    print(
-        "Training completed."
-    )
-
-    # --------------------------------------------------------
-    # Evaluation
-    # --------------------------------------------------------
-
-    print(
-        "\nEvaluating test set..."
-    )
-
-    metrics = evaluate_model(
-        model,
-        X_test,
-        y_test,
-    )
-
-    print("\n" + "=" * 70)
-    print("TEST SET RESULTS")
-    print("=" * 70)
-
-    print(
-        f"Accuracy : {metrics['accuracy']:.4f}"
-    )
-
-    print(
-        f"Precision: {metrics['precision']:.4f}"
-    )
-
-    print(
-        f"Recall   : {metrics['recall']:.4f}"
-    )
-
-    print(
-        f"F1 Score : {metrics['f1']:.4f}"
-    )
-
-    print(
-        f"ROC-AUC  : {metrics['roc_auc']:.4f}"
-    )
-
-    print("\nConfusion Matrix:")
-
-    print(
-        np.array(
-            metrics["confusion_matrix"]
+        model.fit(
+            X_train,
+            y_train
         )
+
+        results[name] = evaluate_model(
+            name,
+            model,
+            X_test,
+            y_test
+        )
+
+    # --------------------------------------------------------
+    # Select best model by ROC-AUC
+    # --------------------------------------------------------
+
+    best_name = max(
+        results,
+        key=lambda name: results[name]["roc_auc"]
     )
 
-    print("\nClassification Report:")
+    best_model = models[best_name]
 
+    print("\n" + "=" * 70)
+    print("BEST MODEL")
+    print("=" * 70)
+
+    print("Selected:", best_name)
     print(
-        metrics["classification_report"]
+        "ROC-AUC:",
+        f"{results[best_name]['roc_auc']:.4f}"
     )
 
     # --------------------------------------------------------
     # Cross-validation
     # --------------------------------------------------------
 
-    print(
-        "\nRunning 5-fold cross-validation..."
+    print("\nRunning 5-fold stratified cross-validation...")
+
+    cv = StratifiedKFold(
+        n_splits=5,
+        shuffle=True,
+        random_state=RANDOM_STATE
     )
 
-    cv_metrics = calculate_cross_validation_auc(
+    cv_scores = cross_val_score(
+        best_model,
         X,
         y,
+        cv=cv,
+        scoring="roc_auc",
+        n_jobs=-1,
     )
 
     print(
-        f"Mean CV ROC-AUC: "
-        f"{cv_metrics['mean_roc_auc']:.4f}"
+        "CV ROC-AUC scores:",
+        np.round(cv_scores, 4)
     )
 
     print(
-        f"CV ROC-AUC Std : "
-        f"{cv_metrics['std_roc_auc']:.4f}"
+        "Mean CV ROC-AUC:",
+        f"{cv_scores.mean():.4f}"
     )
 
     print(
-        "Fold scores:",
-        cv_metrics["fold_scores"],
+        "CV ROC-AUC std:",
+        f"{cv_scores.std():.4f}"
     )
 
     # --------------------------------------------------------
-    # Save artifacts
+    # Calibrate best model
     # --------------------------------------------------------
 
-    print(
-        "\nSaving model artifacts..."
+    print("\nCalibrating final model probabilities...")
+
+    calibrated_model = CalibratedClassifierCV(
+        estimator=best_model,
+        method="sigmoid",
+        cv=5,
     )
 
-    metadata = save_artifacts(
-        model=model,
-        metrics=metrics,
-        cv_metrics=cv_metrics,
-        dataset_mode=dataset_mode,
-        dataset_size=len(df),
+    calibrated_model.fit(
+        X_train,
+        y_train
+    )
+
+    # --------------------------------------------------------
+    # Save model
+    # --------------------------------------------------------
+
+    joblib.dump(
+        calibrated_model,
+        MODEL_FILE
+    )
+
+    joblib.dump(
+        MODEL_FEATURES,
+        FEATURE_FILE
+    )
+
+    metadata = {
+        "model_type": "CalibratedClassifierCV",
+        "base_model": best_name,
+        "dataset_mode": "large_placement_dataset",
+        "training_file": data_file,
+        "training_rows": int(len(X_train)),
+        "testing_rows": int(len(X_test)),
+        "total_rows": int(len(X)),
+        "feature_count": len(MODEL_FEATURES),
+        "features": MODEL_FEATURES,
+        "target": TARGET,
+        "test_metrics": results[best_name],
+        "cv_roc_auc_mean": float(cv_scores.mean()),
+        "cv_roc_auc_std": float(cv_scores.std()),
+        "cv_roc_auc_scores": [
+            float(x) for x in cv_scores
+        ],
+        "synthetic_demo_warning": (
+            "The source competition dataset is a structured "
+            "placement prediction dataset and should not be "
+            "described as verified real-world student records."
+        ),
+        "probability_warning": (
+            "The displayed probability is a calibrated model "
+            "estimate based on the training dataset. It is not "
+            "a guarantee of employment."
+        ),
+        "branch_skill_mapping": BRANCH_SKILLS,
+    }
+
+    joblib.dump(
+        metadata,
+        METADATA_FILE
+    )
+
+    joblib.dump(
+        create_recommendation_rules(),
+        RULES_FILE
     )
 
     # --------------------------------------------------------
@@ -1149,70 +1454,50 @@ def main():
     # --------------------------------------------------------
 
     print("\n" + "=" * 70)
-    print("✅ TRAINING COMPLETE")
+    print("TRAINING COMPLETE")
     print("=" * 70)
 
-    print(
-        f"\nCreated:"
-    )
+    print("\nCreated files:")
 
-    print(
-        f"  ✓ {MODEL_FILE}"
-    )
+    for file_name in [
+        MODEL_FILE,
+        FEATURE_FILE,
+        METADATA_FILE,
+        RULES_FILE,
+    ]:
+        print(" ✓", file_name)
 
-    print(
-        f"  ✓ {FEATURE_FILE}"
-    )
+    print("\nModel features:")
 
-    print(
-        f"  ✓ {METADATA_FILE}"
-    )
-
-    print(
-        f"  ✓ {RULE_FILE}"
-    )
-
-    print(
-        "\nModel features:"
-    )
-
-    for index, feature in enumerate(
-        FEATURE_NAMES,
-        start=1,
+    for i, feature in enumerate(
+        MODEL_FEATURES,
+        start=1
     ):
         print(
-            f"  {index:02d}. {feature}"
+            f"{i:02d}. {feature}"
         )
 
+    print("\nBest model:")
+    print(best_name)
+
     print(
-        "\nDataset mode:",
-        metadata["dataset_mode"],
+        "\nTest ROC-AUC:",
+        f"{results[best_name]['roc_auc']:.4f}"
     )
 
-    if dataset_mode == "synthetic_demo":
-
-        print("\n⚠️ IMPORTANT:")
-        print(
-            "This model was trained using synthetic demonstration data."
-        )
-        print(
-            "Its probabilities are NOT real-world employment probabilities."
-        )
-        print(
-            "For meaningful real-world evaluation, replace the synthetic"
-        )
-        print(
-            "dataset with historical placement outcome data."
-        )
-
-    else:
-
-        print(
-            "\n✓ Model was trained using placement_training_data.csv."
-        )
+    print(
+        "Mean CV ROC-AUC:",
+        f"{cv_scores.mean():.4f}"
+    )
 
     print(
-        "\nYou can now use the generated .pkl files with streamlit_app.py."
+        "\nPlacement rate:",
+        f"{y.mean() * 100:.2f}%"
+    )
+
+    print(
+        "\nThe four generated .pkl files are ready "
+        "for the Streamlit application."
     )
 
 

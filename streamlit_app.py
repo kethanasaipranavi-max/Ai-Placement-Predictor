@@ -1089,11 +1089,11 @@ def build_ai_prompt(student, prediction_context=None):
                 "target_career": "Not selected",
         }
     
-    context = prediction_context or {}
+       context = prediction_context or {}
 
-    strengths = context.get("strengths", [])
-    gaps = context.get("gaps", [])
-    probability = context.get("probability")
+       strengths = context.get("strengths", [])
+       gaps = context.get("gaps", [])
+       probability = context.get("probability")
 
     return f"""
 You are an AI career guidance assistant for a college student.

@@ -575,62 +575,70 @@ def get_model_feature_names(model, artifact_features):
         "cgpa_category_Low",
     ]
 
-
 def build_exact_model_input(student, feature_names, model=None):
-    """Build input using the fitted model's real schema.
+    """Build the exact 17-feature input expected by the trained model."""
 
-    IMPORTANT: do not use unsupported/stale feature-artifact columns. The supplied
-    artifact may contain gender_Female, degree_BCA and branch_AI, while the trained
-    model was fitted with only the 21 columns below.
-    """
-    if model is not None:
-        expected_features = get_model_feature_names(model, feature_names)
-    else:
-        expected_features = list(feature_names)
+    domain_scores = list(student["branch_skills"].values())[:5]
 
-    model_branch = map_branch_for_model(student["ug_branch"])
-    degree = student["ug_degree"]
-    gender = student["gender"]
-    category = get_cgpa_category(student["ug_cgpa"])
+    while len(domain_scores) < 5:
+        domain_scores.append(5.0)
 
     values = {
         "age": float(student["age"]),
-        "cgpa": float(student["ug_cgpa"]),
+        "ug_cgpa": float(student["ug_cgpa"]),
         "backlogs": float(student["backlogs"]),
         "internships": float(student["internships"]),
         "certifications": float(student["certifications"]),
         "coding_skills": float(student["coding_skills"]),
         "communication_skills": float(student["communication_skills"]),
         "aptitude_score": float(student["aptitude_score"]),
-        "projects": float(student["projects"]),
-        "gender_Male": 1.0 if gender == "Male" else 0.0,
-        "degree_BE": 1.0 if degree == "BE" else 0.0,
-        "degree_BSc": 1.0 if degree == "BSc" else 0.0,
-        "degree_BTech": 1.0 if degree == "BTech" else 0.0,
-        "branch_CS": 1.0 if model_branch == "CS" else 0.0,
-        "branch_DS": 1.0 if model_branch == "DS" else 0.0,
-        "branch_Electrical": 1.0 if model_branch == "Electrical" else 0.0,
-        "branch_IT": 1.0 if model_branch == "IT" else 0.0,
-        "branch_Mechanical": 1.0 if model_branch == "Mechanical" else 0.0,
-        "cgpa_category_Excellent": 1.0 if category == "Excellent" else 0.0,
-        "cgpa_category_Good": 1.0 if category == "Good" else 0.0,
-        "cgpa_category_Low": 1.0 if category == "Low" else 0.0,
+        "domain_skill_1": float(domain_scores[0]),
+        "domain_skill_2": float(domain_scores[1]),
+        "domain_skill_3": float(domain_scores[2]),
+        "domain_skill_4": float(domain_scores[3]),
+        "domain_skill_5": float(domain_scores[4]),
+        "gender": str(student["gender"]),
+        "ug_degree": str(student["ug_degree"]),
+        "ug_branch": str(student["ug_branch"]),
     }
 
-    unsupported = [f for f in expected_features if f not in values]
-    if unsupported:
+    expected_features = [
+        "age",
+        "ug_cgpa",
+        "backlogs",
+        "internships",
+        "certifications",
+        "coding_skills",
+        "communication_skills",
+        "aptitude_score",
+        "domain_skill_1",
+        "domain_skill_2",
+        "domain_skill_3",
+        "domain_skill_4",
+        "domain_skill_5",
+        "gender",
+        "ug_degree",
+        "ug_branch",
+    ]
+
+    # Projects is the 17th feature if your trained artifact contains it.
+    if "projects" in feature_names:
+        values["projects"] = float(student["projects"])
+        expected_features.append("projects")
+
+    missing = [f for f in feature_names if f not in values]
+
+    if missing:
         raise RuntimeError(
-            "The trained model expects feature(s) this app cannot construct: "
-            + ", ".join(unsupported)
-            + ". Please use the matching model artifact."
+            "17-feature model input mismatch. Missing: "
+            + ", ".join(missing)
         )
 
-    # Exact order expected by the fitted estimator.
     return pd.DataFrame(
-        [{f: values[f] for f in expected_features}],
-        columns=expected_features,
+        [{f: values[f] for f in feature_names}],
+        columns=feature_names,
     )
-
+    
 def get_classes(model):
     classes = getattr(model, "classes_", None)
     if classes is not None:

@@ -1078,15 +1078,15 @@ def build_builtin_career_report(student, prediction_context=None):
 
 def build_ai_prompt(student, prediction_context=None):
         if isinstance(student, str):
-        student = {
-            "ug_degree": student,
-            "ug_branch": "Not provided",
-            "ug_cgpa": "Not provided",
-            "pg_degree": "Not Applicable",
-            "pg_branch": "Not Applicable",
-            "pg_cgpa": "Not Applicable",
-            "career_interest": "Not selected",
-            "target_career": "Not selected",
+            student = {
+                "ug_degree": student,
+                "ug_branch": "Not provided",
+                "ug_cgpa": "Not provided",
+                "pg_degree": "Not Applicable",
+                "pg_branch": "Not Applicable",
+                "pg_cgpa": "Not Applicable",
+                "career_interest": "Not selected",
+                "target_career": "Not selected",
         }
     
     context = prediction_context or {}

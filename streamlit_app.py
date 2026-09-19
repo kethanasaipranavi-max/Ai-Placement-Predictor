@@ -19,6 +19,8 @@ st.set_page_config(
 # ============================================================
 # LOAD MODEL ARTIFACTS
 # ============================================================
+st.write("DEBUG - files available in app folder:")
+st.write(os.listdir("."))
 
 MODEL_FILE = "placement_prediction_final.pkl"
 FEATURE_FILE = "placement_feature_names_final.pkl"

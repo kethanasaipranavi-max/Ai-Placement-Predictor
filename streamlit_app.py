@@ -612,7 +612,7 @@ def build_exact_model_input(student, feature_names, model=None):
             + ", ".join(unsupported)           
         )
 
-     return pd.DataFrame([{f: values[f] for f in expected_features}])
+    return pd.DataFrame([{f: values[f] for f in expected_features}])
 
 def get_classes(model):
     classes = getattr(model, "classes_", None)

@@ -94,6 +94,7 @@ def get_branch_skills(branch):
         branch,
         ["Core Domain Knowledge", "Practical Skills", "Research Skills", "Industry Knowledge", "Problem Solving"],
     )
+
 # ============================================================
 # EDUCATION / SPECIALIZATION OPTIONS
 # ============================================================
@@ -157,155 +158,110 @@ UG_SPECIALIZATIONS = [
 ]
 
 # The user asked for the complete final UG specialization list to also be
-# available in PG Specialization. BCA/BBA/BCom/BA are included here because
-# they were explicitly requested for the PG specialization dropdown, while
-# they are not present in the UG specialization dropdown.
-PG_SPECIALIZATIONS = UG_SPECIALIZATIONS + ["BCA", "BBA", "BCom", "BA"]
+# ============================================================
+# PROFILE FEEDBACK
+# ============================================================
 
-PG_DEGREES = ["MTech", "ME", "MSc", "MCA", "MBA", "MCom", "MA", "MS", "MPhil", "Other"]
-    "Computer": ["Software Development", "Data Analytics", "Cyber Security", "Cloud / DevOps"],
-    "Information Technology": ["Software Development", "Cloud / DevOps", "Cyber Security", "Networking"],
-    "Cyber": ["Cyber Security", "Networking", "Cloud / DevOps"],
-    "Finance": ["Finance / Accounting", "Data Analytics", "Business / Management"],
-    "Accounting": ["Finance / Accounting", "Business / Management", "Teaching / Education"],
-    "Commerce": ["Finance / Accounting", "Business / Management", "Teaching / Education"],
-    "Business": ["Business / Management", "Data Analytics", "Marketing"],
-    "Management": ["Business / Management", "Marketing", "Human Resources", "Data Analytics"],
-    "Marketing": ["Marketing", "Business / Management", "Data Analytics"],
-    "Human Resources": ["Human Resources", "Business / Management", "Research / Academia"],
-    "Psychology": ["Psychology / Counseling", "Research / Academia", "Human Resources", "Teaching / Education"],
-    "Physics": ["Research / Academia", "Teaching / Education", "Instrumentation"],
-    "Chemistry": ["Research / Academia", "Teaching / Education", "Chemical / Process", "Quality Engineering"],
-    "Biotechnology": ["Biotechnology / Life Sciences", "Research / Academia", "Quality Engineering"],
-    "Microbiology": ["Biotechnology / Life Sciences", "Research / Academia", "Healthcare / Diagnostics"],
-    "Food": ["Food / Nutrition", "Quality Engineering", "Research / Academia"],
-    "Nutrition": ["Food / Nutrition", "Healthcare / Nutrition", "Research / Academia", "Teaching / Education"],
-    "Electrical": ["Electrical / Power", "Automation", "Embedded / VLSI", "Research / Academia"],
-    "Electronics": ["Electronics / Instrumentation", "Embedded / VLSI", "Research / Academia"],
-    "Communication": ["Networking", "Telecommunications", "Embedded / VLSI", "Research / Academia"],
-    "Mechanical": ["Mechanical / Design", "Manufacturing", "Operations", "Research / Academia"],
-    "Automobile": ["Automotive", "Mechanical / Design", "Manufacturing", "Research / Academia"],
-    "Civil": ["Civil / Construction", "Infrastructure", "Government / Public Sector", "Research / Academia"],
-    "Chemical": ["Chemical / Process", "Quality Engineering", "Research / Academia"],
-    "Environmental": ["Environmental Science", "Sustainability", "Research / Academia", "Government / Public Sector"],
-    "English": ["Content / Communication", "Teaching / Education", "Research / Academia", "Publishing / Editing"],
-    "Political": ["Government / Public Sector", "Policy Research", "Research / Academia", "Teaching / Education"],
-    "Sociology": ["Social Research", "Research / Academia", "Government / Public Sector", "Teaching / Education"],
-    "History": ["Research / Academia", "Teaching / Education", "Museum / Heritage", "Government / Public Sector"],
-}
+def get_profile_strengths(student):
+    strengths = []
+    if student["ug_cgpa"] >= 8:
+        strengths.append(f"Strong academic performance with a CGPA of {student['ug_cgpa']:.2f}.")
+    if student["backlogs"] == 0:
+        strengths.append("No current academic backlogs.")
+    if student["internships"] >= 1:
+        strengths.append(f"{student['internships']} internship(s) provide practical exposure.")
+    if student["projects"] >= 2:
+        strengths.append(f"{student['projects']} projects demonstrate practical experience.")
+    if student["certifications"] >= 2:
+        strengths.append(f"{student['certifications']} certifications show continued learning.")
+    if student["communication_skills"] >= 7:
+        strengths.append("Good communication skill level.")
+    if student["aptitude_score"] >= 75:
+        strengths.append("Strong aptitude performance.")
+    strongest = sorted(student["branch_skills"].items(), key=lambda x: x[1], reverse=True)[:2]
+    strengths.extend([f"Strong branch skill: {name} ({score}/10)." for name, score in strongest if score >= 7])
+    return strengths[:6] or ["The profile provides a foundation that can be strengthened through focused preparation."]
 
 
-def _dedupe(items):
-    seen = set()
+def get_profile_gaps(student):
+    gaps = []
+    if student["ug_cgpa"] < 7:
+        gaps.append("Academic performance")
+    if student["backlogs"] > 0:
+        gaps.append("Backlog clearance")
+    if student["internships"] == 0:
+        gaps.append("Industry/internship exposure")
+    if student["projects"] < 2:
+        gaps.append("Practical project experience")
+    if student["certifications"] == 0:
+        gaps.append("Relevant certifications")
+    if student["communication_skills"] < 6:
+        gaps.append("Communication and interview skills")
+    if student["aptitude_score"] < 60:
+        gaps.append("Aptitude preparation")
+    for skill, score in sorted(student["branch_skills"].items(), key=lambda x: x[1]):
+        if score <= 4:
+            gaps.append(f"{skill}")
+    return gaps[:8]
+
+
+def generate_recommendations(student, rules):
+    fallback = {
+        "Academic performance": "Focus on improving academic performance and maintaining a consistent CGPA.",
+        "Backlog clearance": "Prioritize clearing academic backlogs because they can affect eligibility for some opportunities.",
+        "Industry/internship exposure": "Seek a relevant internship, industry project, research project or supervised practical experience.",
+        "Practical project experience": "Build branch-specific projects that demonstrate practical application of your knowledge.",
+        "Relevant certifications": "Consider certifications that directly support your chosen career direction.",
+        "Communication and interview skills": "Practice structured answers, presentations, group discussions and mock interviews.",
+        "Aptitude preparation": "Practice quantitative aptitude, logical reasoning and verbal reasoning regularly.",
+    }
+    rule_key = {
+        "Academic performance": "cgpa",
+        "Backlog clearance": "backlogs",
+        "Industry/internship exposure": "internships",
+        "Practical project experience": "projects",
+        "Relevant certifications": "certifications",
+        "Communication and interview skills": "communication_skills",
+        "Aptitude preparation": "aptitude_score",
+    }
     output = []
-    for item in items:
-        if item and item not in seen:
-            seen.add(item)
-            output.append(item)
-    return output
+    for gap in get_profile_gaps(student):
+        key = rule_key.get(gap)
+        if isinstance(rules, dict) and key in rules:
+            item = rules[key]
+            message = item.get("message") if isinstance(item, dict) else str(item)
+            if message and message not in output:
+                output.append(message)
+        elif gap in fallback:
+            output.append(fallback[gap])
+        elif gap not in output:
+            output.append(f"Improve {gap} through structured practice and branch-relevant projects.")
+    return output[:6]
 
+# ============================================================
+# PREDICTION
+# ============================================================
 
-def _career_groups_for_profile(ug_branch, pg_branch="Not Applicable"):
-    groups = list(BRANCH_CAREER_GROUP.get(ug_branch, COMMON_CAREERS))
-    combined = f"{ug_branch} {pg_branch}".lower()
-    for keyword, extra in SPECIALIZATION_KEYWORDS.items():
-        if keyword.lower() in combined:
-            groups.extend(extra)
-    groups.extend(COMMON_CAREERS)
-    return _dedupe(groups)
+def run_prediction(student):
+    model, feature_names, rules, metadata = load_components()
+    model_input = build_exact_model_input(student, feature_names, model)
 
+    prediction = model.predict(model_input)[0]
+    probability = get_positive_probability(model, model_input)
+    placed = str(prediction).strip().lower() in {"1", "true", "placed", "yes"} or prediction == 1
 
-def get_career_interests(ug_branch, pg_branch="Not Applicable"):
-    return _career_groups_for_profile(ug_branch, pg_branch)
-
-
-def get_target_careers(ug_branch, career_interest, pg_branch="Not Applicable"):
-    groups = _career_groups_for_profile(ug_branch, pg_branch)
-    if career_interest in CAREER_TARGETS:
-        targets = list(CAREER_TARGETS[career_interest])
-    else:
-        # If a branch has a career group not explicitly mapped, derive sensible
-        # targets from its domain rather than showing unrelated careers.
-        targets = []
-        if career_interest in groups:
-            targets = CAREER_TARGETS.get(career_interest, [])
-
-    if career_interest == "Teaching / Education":
-        targets = [
-            "School Teacher", "Subject Teacher", "College Lecturer", "Assistant Professor Track",
-            "Online Instructor", "Academic Coordinator", "Private Tutor",
-        ]
-    elif career_interest == "Research / Academia":
-        targets = [
-            "Research Assistant", "Research Associate", "Project Assistant", "Junior Research Fellow",
-            "Academic Researcher", "PhD / Doctoral Research Track",
-        ]
-    elif career_interest == "Higher Studies":
-        targets = ["Master's Degree", "Specialized Higher Studies", "PhD / Doctoral Track", "Professional Certification Track"]
-    elif career_interest == "Government / Public Sector":
-        targets = ["Government Technical Officer", "Public Sector Analyst", "Administrative Officer", "Government Exam Candidate"]
-
-    if not targets:
-        targets = ["Domain-specific Entry-Level Role", "Research Assistant", "Teaching / Education"]
-
-    return _dedupe(targets)
-        "Cyber Security": [
-            "Security Log Monitoring Dashboard",
-            "Network Security Assessment Lab",
-            "Phishing Detection and Awareness Tool",
-        ],
-        "Cloud / DevOps": [
-            "Containerized Web Application Deployment",
-            "CI/CD Pipeline for a Student Project",
-            "Cloud Monitoring and Deployment Dashboard",
-        ],
-        "Teaching / Education": [
-            "Interactive Subject Learning Portal",
-            "Practice-Test and Progress Tracking System",
-            "Digital Lesson and Assessment Resource",
-        ],
-        "Research / Academia": [
-            "Literature Review and Research Gap Study",
-            "Reproducible Domain Experiment",
-            "Research Dataset Analysis and Report",
-        ],
-    }.get(interest, [
-        f"{ug} Practical Portfolio Project",
-        f"{ug} Data / Process Analysis Project",
-        f"{ug} Research or Industry Case Study",
-    ])
-
-    gaps = [name for name, score in weakest if score <= 6]
-    gap_text = ", ".join(gaps) if gaps else "No major branch-skill gap was identified from the selected ratings."
-    strength_text = ", ".join(f"{name} ({score}/10)" for name, score in strongest)
-    pg_text = f"PG specialization: {pg}" if pg else "No PG specialization selected."
-
-    return f"""### Built-in Career Guidance\n\nGemini/Groq was temporarily unavailable, so this report was generated by the app's built-in career guidance rules. It is based on the profile entered in the dashboard.\n\n## 1. Overall Profile Assessment\n- UG domain: **{ug}**\n- {pg_text}\n- Career interest: **{interest}**\n- Target role: **{target}**\n- Strongest selected skills: **{strength_text}**\n\n## 2. Career Direction\nYour selected career direction is **{interest}**. Build the portfolio around **{target}**, while using your UG/PG specialization as the domain foundation.\n\n## 3. Career Path to the Target Role\n1. Strengthen the core concepts required for {interest}.\n2. Learn the main tools listed below and use them in practical work.\n3. Complete the three portfolio projects below and publish documented work on GitHub.\n4. Add internship, research, teaching, volunteering, freelance, or supervised practical experience where appropriate.\n5. Prepare role-specific interview questions and a focused resume.\n\n## 4. Top Strengths\n- {strength_text}\n- Projects: {student['projects']}\n- Internships: {student['internships']}\n- Certifications: {student['certifications']}\n- Communication: {student['communication_skills']}/10\n\n## 5. Skill Gap Analysis\nMain areas to improve from the selected skill ratings: **{gap_text}**.\n\n## 6. Areas to Improve\n- Build more role-specific practical evidence.\n- Practice communication and interview explanations.\n- Improve the lowest-rated technical/domain skills first.\n- Keep GitHub projects documented with README files, screenshots, setup steps and results.\n\n## 7. 30-Day Improvement Plan\n- **Days 1-7:** Revise fundamentals for {interest}; identify the exact skills needed for {target}.\n- **Days 8-14:** Build Project 1 and document the work.\n- **Days 15-21:** Build Project 2 and complete targeted practice/interview questions.\n- **Days 22-30:** Finish Project 3, improve resume/GitHub, and conduct mock interviews.\n\n## 8. Technical Topics to Study\nFocus on the core concepts of **{interest}**, then the tools below.\n\n## 9. Industry Tools and Professional Skills\n**Suggested tools:** {tools}\n\n## 10. Project Ideas\n### 1. {projects[0]}\nBuild a complete, documented version relevant to **{target}**. Demonstrate problem solving, domain knowledge, implementation and measurable results.\n\n### 2. {projects[1]}\nCreate a second project that solves a different practical problem in the same career direction. Include data/process/design decisions and a clear README.\n\n### 3. {projects[2]}\nCreate a third project that shows depth, testing/evaluation and professional presentation.\n\n## 11. Teaching and Research Options\n- **Teaching:** consider tutoring, subject-content creation, lab assistance, workshops or a future lecturer/teacher path if it matches your qualifications.\n- **Research:** consider literature reviews, research projects, faculty-guided work, research internships or a postgraduate/PhD path.\n\n## 12. Interview Preparation\nPrepare a 60-second introduction, explain each project clearly, revise core domain concepts, and practice behavioral questions using real examples from your experience.\n\n## 13. GitHub and Resume Plan\nKeep 3-5 strong projects pinned, add clear README files, include technologies and outcomes, and tailor the resume to **{target}**.\n\n## 14. 3-Month Roadmap\n- **Month 1:** fundamentals + Project 1.\n- **Month 2:** Project 2 + internship/research/teaching applications.\n- **Month 3:** Project 3 + resume + GitHub + mock interviews + targeted applications.\n\n## 15. Final Action Checklist\n- [ ] Strengthen the weakest skills.\n- [ ] Finish exactly 3 strong portfolio projects.\n- [ ] Publish and document projects on GitHub.\n- [ ] Improve resume for {target}.\n- [ ] Practice technical and behavioral interviews.\n- [ ] Apply for relevant internships, jobs, research or teaching opportunities.\n"""
-
-
-def generate_ai_guidance(student, prediction_context=None):
-    prompt = build_ai_prompt(student, prediction_context)
-    errors = []
-
-    if get_secret("GROQ_API_KEY"):
-        try:
-            return generate_with_groq(prompt), "Groq"
-        except Exception as exc:
-            errors.append(f"Groq: {exc}")
-    else:
-        errors.append("Groq: GROQ_API_KEY is not configured.")
-
-    if get_secret("GEMINI_API_KEY"):
-        try:
-            return generate_with_gemini(prompt), "Gemini"
-        except Exception as exc:
-            errors.append(f"Gemini: {exc}")
-    else:
-        errors.append("Gemini: GEMINI_API_KEY is not configured.")
-
-    # Never leave the user with a blank AI panel because a provider is temporarily down.
-    fallback = build_builtin_career_report(student, prediction_context)
-    return fallback, "Built-in Career Guidance"
+    return {
+        "prediction": prediction,
+        "prediction_text": "LIKELY PLACED" if placed else "NOT PLACED",
+        "probability": probability,
+        "profile_readiness": calculate_profile_readiness(student),
+        "model_input": model_input,
+        "feature_names": feature_names,
+        "metadata": metadata,
+        "strengths": get_profile_strengths(student),
+        "gaps": get_profile_gaps(student),
+        "recommendations": generate_recommendations(student, rules),
+    }
         score for skill, score in domain_scores.items()
         if any(keyword in skill for keyword in ["Programming", "Software", "Problem Solving", "Python"])
     ]

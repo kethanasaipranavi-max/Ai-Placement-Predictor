@@ -17,1270 +17,379 @@ st.set_page_config(
     page_title="AI Student Placement Predictor",
     page_icon="🎓",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
 
 # ============================================================
-# MODEL FILES
+# CONSTANTS
 # ============================================================
 
 MODEL_FILE = "placement_prediction_final.pkl"
 FEATURE_FILE = "placement_feature_names_final.pkl"
 METADATA_FILE = "placement_model_metadata.pkl"
-RULE_FILE = "recommendation_rules.pkl"
+RULES_FILE = "recommendation_rules.pkl"
 
 
 # ============================================================
-# SESSION STATE
+# BASIC STYLING
 # ============================================================
 
-if "prediction_result" not in st.session_state:
-    st.session_state.prediction_result = None
-
-if "student_profile" not in st.session_state:
-    st.session_state.student_profile = None
-
-if "ai_guidance" not in st.session_state:
-    st.session_state.ai_guidance = None
-
-if "ai_provider" not in st.session_state:
-    st.session_state.ai_provider = None
-
-
-# ============================================================
-# BRANCH-SPECIFIC DOMAIN SKILLS
-# ============================================================
-
-def get_branch_skills(branch):
-
-    skills = {
-
-        "Computer Science": [
-            "Programming",
-            "Data Structures & Algorithms",
-            "Databases",
-            "Software Development",
-            "Problem Solving",
-        ],
-
-        "Information Technology": [
-            "Programming",
-            "Networking",
-            "Databases",
-            "Cloud Computing",
-            "System Administration",
-        ],
-
-        "Data Science": [
-            "Python / Programming",
-            "Statistics",
-            "Data Analysis",
-            "Machine Learning",
-            "Data Visualization",
-        ],
-
-        "Artificial Intelligence": [
-            "Programming",
-            "Machine Learning",
-            "Deep Learning",
-            "Mathematics",
-            "Data Analysis",
-        ],
-
-        "Machine Learning": [
-            "Python",
-            "Machine Learning",
-            "Statistics",
-            "Deep Learning",
-            "Data Processing",
-        ],
-
-        "Cyber Security": [
-            "Networking",
-            "Cyber Security Concepts",
-            "Linux",
-            "Security Tools",
-            "Ethical Hacking",
-        ],
-
-        "Software Engineering": [
-            "Programming",
-            "Software Design",
-            "Databases",
-            "Web Development",
-            "Problem Solving",
-        ],
-
-        "Computer Applications": [
-            "Programming",
-            "Databases",
-            "Web Development",
-            "Software Applications",
-            "Problem Solving",
-        ],
-
-        "Mechanical Engineering": [
-            "CAD / Design",
-            "Thermodynamics",
-            "Manufacturing",
-            "Machine Design",
-            "Production Processes",
-        ],
-
-        "Automobile Engineering": [
-            "Automobile Systems",
-            "CAD / Design",
-            "Engine Technology",
-            "Manufacturing",
-            "Vehicle Diagnostics",
-        ],
-
-        "Production Engineering": [
-            "Manufacturing",
-            "Production Planning",
-            "Quality Control",
-            "Industrial Processes",
-            "CAD",
-        ],
-
-        "Industrial Engineering": [
-            "Operations Management",
-            "Production Systems",
-            "Quality Management",
-            "Supply Chain",
-            "Industrial Analysis",
-        ],
-
-        "Aeronautical Engineering": [
-            "Aerodynamics",
-            "Aircraft Systems",
-            "CAD",
-            "Propulsion",
-            "Manufacturing",
-        ],
-
-        "Aerospace Engineering": [
-            "Aerodynamics",
-            "Aircraft Design",
-            "Propulsion",
-            "CAD",
-            "Space Systems",
-        ],
-
-        "Electrical Engineering": [
-            "Circuit Analysis",
-            "Power Systems",
-            "Control Systems",
-            "PLC / Automation",
-            "Electrical Design",
-        ],
-
-        "Electronics Engineering": [
-            "Electronic Circuits",
-            "Embedded Systems",
-            "PCB Design",
-            "Microcontrollers",
-            "Instrumentation",
-        ],
-
-        "Electronics and Communication Engineering": [
-            "Communication Systems",
-            "Embedded Systems",
-            "Electronics",
-            "Signal Processing",
-            "VLSI",
-        ],
-
-        "Biomedical Engineering": [
-            "Biomedical Instrumentation",
-            "Medical Devices",
-            "Electronics",
-            "Clinical Engineering",
-            "Signal Processing",
-        ],
-
-        "Civil Engineering": [
-            "Structural Engineering",
-            "AutoCAD",
-            "Surveying",
-            "Construction Management",
-            "Quantity Estimation",
-        ],
-
-        "Chemical Engineering": [
-            "Chemical Processes",
-            "Thermodynamics",
-            "Process Engineering",
-            "Plant Operations",
-            "Industrial Safety",
-        ],
-
-        "Mathematics": [
-            "Mathematical Analysis",
-            "Statistics",
-            "Problem Solving",
-            "Quantitative Reasoning",
-            "Research Methods",
-        ],
-
-        "Statistics": [
-            "Statistical Analysis",
-            "Probability",
-            "Data Interpretation",
-            "Research Methods",
-            "Quantitative Analysis",
-        ],
-
-        "Physics": [
-            "Laboratory Techniques",
-            "Instrumentation",
-            "Electronics",
-            "Scientific Analysis",
-            "Research Methods",
-        ],
-
-        "Chemistry": [
-            "Analytical Chemistry",
-            "Laboratory Techniques",
-            "Chemical Analysis",
-            "Instrumentation",
-            "Research Methods",
-        ],
-
-        "Environmental Science": [
-            "Environmental Analysis",
-            "Sustainability",
-            "Environmental Monitoring",
-            "Research Methods",
-            "Data Analysis",
-        ],
-
-        "Biotechnology": [
-            "Laboratory Techniques",
-            "Molecular Biology",
-            "Biotechnology Methods",
-            "Research Skills",
-            "Scientific Analysis",
-        ],
-
-        "Microbiology": [
-            "Microbiology Techniques",
-            "Laboratory Skills",
-            "Culture Techniques",
-            "Research Methods",
-            "Scientific Analysis",
-        ],
-
-        "Biochemistry": [
-            "Biochemical Techniques",
-            "Laboratory Skills",
-            "Chemical Analysis",
-            "Research Methods",
-            "Scientific Analysis",
-        ],
-
-        "Biological Sciences": [
-            "Laboratory Skills",
-            "Research Methods",
-            "Scientific Analysis",
-            "Biological Techniques",
-            "Data Interpretation",
-        ],
-
-        "Life Sciences": [
-            "Laboratory Skills",
-            "Research Methods",
-            "Scientific Analysis",
-            "Biological Techniques",
-            "Data Interpretation",
-        ],
-
-        "Genetics": [
-            "Genetics",
-            "Molecular Biology",
-            "Laboratory Skills",
-            "Research Methods",
-            "Scientific Analysis",
-        ],
-
-        "Botany": [
-            "Plant Biology",
-            "Laboratory Skills",
-            "Research Methods",
-            "Field Research",
-            "Scientific Analysis",
-        ],
-
-        "Zoology": [
-            "Animal Biology",
-            "Laboratory Skills",
-            "Research Methods",
-            "Field Research",
-            "Scientific Analysis",
-        ],
-
-        "Food Science and Nutrition": [
-            "Nutrition Science",
-            "Food Analysis",
-            "Laboratory Skills",
-            "Diet Planning",
-            "Food Safety",
-        ],
-
-        "Food Technology": [
-            "Food Processing",
-            "Food Safety",
-            "Quality Control",
-            "Laboratory Analysis",
-            "Manufacturing",
-        ],
-
-        "Nutrition and Dietetics": [
-            "Clinical Nutrition",
-            "Diet Planning",
-            "Nutrition Assessment",
-            "Food Science",
-            "Communication",
-        ],
-
-        "Economics": [
-            "Economic Analysis",
-            "Statistics",
-            "Financial Analysis",
-            "Research Methods",
-            "Quantitative Analysis",
-        ],
-
-        "Commerce": [
-            "Accounting",
-            "Taxation",
-            "Financial Analysis",
-            "Auditing",
-            "Business Knowledge",
-        ],
-
-        "Business Administration": [
-            "Business Strategy",
-            "Marketing",
-            "Operations",
-            "Management",
-            "Business Analysis",
-        ],
-
-        "Finance": [
-            "Financial Analysis",
-            "Accounting",
-            "Investment Analysis",
-            "Financial Modeling",
-            "Banking Knowledge",
-        ],
-
-        "Accounting": [
-            "Accounting",
-            "Taxation",
-            "Auditing",
-            "Financial Reporting",
-            "Financial Analysis",
-        ],
-
-        "Management": [
-            "Leadership",
-            "Operations",
-            "Business Strategy",
-            "Project Management",
-            "Decision Making",
-        ],
-
-        "Marketing": [
-            "Marketing Strategy",
-            "Digital Marketing",
-            "Market Research",
-            "Brand Management",
-            "Consumer Analysis",
-        ],
-
-        "Human Resources": [
-            "Recruitment",
-            "HR Operations",
-            "Employee Relations",
-            "Talent Management",
-            "Organizational Skills",
-        ],
-
-        "Psychology": [
-            "Psychological Assessment",
-            "Research Methods",
-            "Counseling Skills",
-            "Behavioral Analysis",
-            "Data Interpretation",
-        ],
-
-        "English": [
-            "Writing",
-            "Communication",
-            "Editing",
-            "Research",
-            "Presentation Skills",
-        ],
-
-        "Political Science": [
-            "Political Analysis",
-            "Research Methods",
-            "Public Policy",
-            "International Relations",
-            "Communication",
-        ],
-
-        "Sociology": [
-            "Social Research",
-            "Research Methods",
-            "Data Analysis",
-            "Community Studies",
-            "Communication",
-        ],
-
-        "History": [
-            "Historical Research",
-            "Research Methods",
-            "Writing",
-            "Analysis",
-            "Documentation",
-        ],
-
-        "Public Administration": [
-            "Public Policy",
-            "Administration",
-            "Governance",
-            "Research",
-            "Management",
-        ],
+st.markdown(
+    """
+    <style>
+    .main-title {
+        font-size: 2.4rem;
+        font-weight: 800;
+        margin-bottom: 0.2rem;
     }
 
-    return skills.get(
-        branch,
-        [
-            "Core Domain Knowledge",
-            "Practical Skills",
-            "Research Skills",
-            "Industry Knowledge",
-            "Problem Solving",
-        ],
-    )
+    .subtitle {
+        color: #666;
+        font-size: 1.05rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+        font-size: 1.45rem;
+        font-weight: 750;
+        margin-top: 1.2rem;
+        margin-bottom: 0.7rem;
+    }
+
+    .prediction-box {
+        padding: 1.2rem;
+        border-radius: 14px;
+        border: 1px solid rgba(128,128,128,0.25);
+        margin-bottom: 1rem;
+    }
+
+    .small-note {
+        color: #777;
+        font-size: 0.9rem;
+    }
+
+    .career-card {
+        padding: 1rem;
+        border-radius: 12px;
+        border: 1px solid rgba(128,128,128,0.25);
+        margin-bottom: 0.8rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
-# CAREER INTERESTS
+# HEADER
 # ============================================================
 
-def get_career_interests(branch):
+st.markdown(
+    '<div class="main-title">🎓 AI Student Placement Predictor</div>',
+    unsafe_allow_html=True,
+)
 
-    if branch in [
-        "Computer Science",
-        "Information Technology",
-        "Data Science",
-        "Artificial Intelligence",
-        "Machine Learning",
-        "Cyber Security",
-        "Software Engineering",
-        "Computer Applications",
-    ]:
-        return [
-            "Software Development",
-            "Data Science",
-            "Artificial Intelligence",
-            "Cyber Security",
-            "Cloud Computing",
-            "Data Analytics",
-            "Other",
-        ]
-
-    if branch in [
-        "Mechanical Engineering",
-        "Automobile Engineering",
-        "Production Engineering",
-        "Industrial Engineering",
-    ]:
-        return [
-            "Design Engineering",
-            "Manufacturing",
-            "Automotive Engineering",
-            "Production Engineering",
-            "Operations",
-            "Other",
-        ]
-
-    if branch in [
-        "Electrical Engineering",
-        "Electronics Engineering",
-        "Electronics and Communication Engineering",
-        "Biomedical Engineering",
-    ]:
-        return [
-            "Embedded Systems",
-            "Electronics Design",
-            "Power Systems",
-            "Automation",
-            "VLSI",
-            "Instrumentation",
-            "Other",
-        ]
-
-    if branch == "Civil Engineering":
-        return [
-            "Structural Engineering",
-            "Construction Management",
-            "Site Engineering",
-            "Infrastructure",
-            "Surveying",
-            "Other",
-        ]
-
-    if branch == "Chemical Engineering":
-        return [
-            "Process Engineering",
-            "Plant Operations",
-            "Chemical Analysis",
-            "Industrial Safety",
-            "Research",
-            "Other",
-        ]
-
-    if branch in [
-        "Biotechnology",
-        "Microbiology",
-        "Biochemistry",
-        "Biological Sciences",
-        "Life Sciences",
-        "Genetics",
-        "Botany",
-        "Zoology",
-    ]:
-        return [
-            "Research",
-            "Laboratory Work",
-            "Biotechnology",
-            "Pharmaceutical Industry",
-            "Quality Control",
-            "Other",
-        ]
-
-    if branch in [
-        "Food Science and Nutrition",
-        "Food Technology",
-        "Nutrition and Dietetics",
-    ]:
-        return [
-            "Food Industry",
-            "Nutrition",
-            "Quality Control",
-            "Food Safety",
-            "Research",
-            "Clinical Nutrition",
-            "Other",
-        ]
-
-    if branch in [
-        "Commerce",
-        "Finance",
-        "Accounting",
-        "Economics",
-    ]:
-        return [
-            "Accounting",
-            "Finance",
-            "Banking",
-            "Financial Analysis",
-            "Auditing",
-            "Business Analytics",
-            "Other",
-        ]
-
-    if branch in [
-        "Business Administration",
-        "Management",
-        "Marketing",
-        "Human Resources",
-    ]:
-        return [
-            "Management",
-            "Marketing",
-            "Human Resources",
-            "Operations",
-            "Business Analytics",
-            "Finance",
-            "Other",
-        ]
-
-    return [
-        "Research",
-        "Teaching",
-        "Government Sector",
-        "Industry",
-        "Higher Studies",
-        "Other",
-    ]
+st.markdown(
+    """
+    <div class="subtitle">
+    Predict placement probability and receive AI-powered career,
+    skill, project, and placement guidance.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
-# PG OPTIONS
-# ============================================================
-
-PG_DEGREES = [
-    "MTech",
-    "ME",
-    "MSc",
-    "MCA",
-    "MBA",
-    "MCom",
-    "MA",
-    "MS",
-    "Other",
-]
-
-
-# ============================================================
-# LOAD MODEL
+# LOAD MODEL ARTIFACTS
 # ============================================================
 
 @st.cache_resource
-def load_components():
-
-    if not os.path.exists(MODEL_FILE):
-        raise FileNotFoundError(
-            f"Missing model file: {MODEL_FILE}"
-        )
-
+def load_artifacts():
     model = joblib.load(MODEL_FILE)
 
-    feature_names = []
+    feature_names = None
+    metadata = {}
+    recommendation_rules = {}
 
     if os.path.exists(FEATURE_FILE):
+        feature_names = joblib.load(FEATURE_FILE)
 
-        feature_names = joblib.load(
-            FEATURE_FILE
-        )
+    if os.path.exists(METADATA_FILE):
+        metadata = joblib.load(METADATA_FILE)
 
-        if isinstance(
-            feature_names,
-            pd.DataFrame,
-        ):
-            feature_names = (
-                feature_names.columns.tolist()
-            )
+    if os.path.exists(RULES_FILE):
+        recommendation_rules = joblib.load(RULES_FILE)
 
-        elif isinstance(
-            feature_names,
-            pd.Series,
-        ):
-            feature_names = (
-                feature_names.tolist()
-            )
+    return model, feature_names, metadata, recommendation_rules
 
-        elif isinstance(
-            feature_names,
-            np.ndarray,
-        ):
-            feature_names = (
-                feature_names.tolist()
-            )
 
-        elif isinstance(
-            feature_names,
-            dict,
-        ):
-            feature_names = feature_names.get(
-                "feature_names",
-                feature_names.get(
-                    "features",
-                    list(
-                        feature_names.keys()
-                    ),
-                ),
-            )
-
-        feature_names = [
-            str(x)
-            for x in feature_names
-        ]
-
-    rules = {}
-
-    if os.path.exists(RULE_FILE):
-
-        try:
-            rules = joblib.load(
-                RULE_FILE
-            )
-        except Exception:
-            rules = {}
-
+try:
+    model, feature_names, metadata, recommendation_rules = load_artifacts()
+    model_loaded = True
+except Exception as e:
+    model_loaded = False
+    model = None
+    feature_names = None
     metadata = {}
+    recommendation_rules = {}
 
-    if os.path.exists(
-        METADATA_FILE
-    ):
+    st.error(f"Could not load the placement model: {e}")
 
-        try:
 
-            metadata = joblib.load(
-                METADATA_FILE
-            )
+# ============================================================
+# SIDEBAR
+# ============================================================
 
-            if not isinstance(
-                metadata,
-                dict,
-            ):
-                metadata = {}
+with st.sidebar:
+    st.header("⚙️ System Status")
 
-        except Exception:
-            metadata = {}
+    if model_loaded:
+        st.success("Placement model loaded")
+    else:
+        st.error("Placement model unavailable")
 
-    return (
-        model,
-        feature_names,
-        rules,
-        metadata,
+    gemini_key = st.secrets.get("GEMINI_API_KEY", None)
+
+    if not gemini_key:
+        gemini_key = os.getenv("GEMINI_API_KEY")
+
+    if gemini_key:
+        st.success("Gemini AI configured")
+    else:
+        st.warning("Gemini AI key not configured")
+
+    st.markdown("---")
+
+    st.markdown("### About")
+
+    st.write(
+        """
+        This application uses a trained machine-learning model to
+        estimate placement probability from student academic,
+        technical, internship, project and skill information.
+
+        Gemini AI is used separately to provide personalized career
+        and placement guidance.
+        """
+    )
+
+    st.markdown("---")
+
+    st.caption(
+        "⚠️ Placement probability is a model estimate and should not "
+        "be interpreted as a guaranteed employment probability."
     )
 
 
 # ============================================================
-# MODEL FEATURE DISCOVERY
+# HELPER FUNCTIONS
 # ============================================================
 
-def get_model_input_features(
-    model,
-    artifact_features,
-):
-
-    names = getattr(
-        model,
-        "feature_names_in_",
-        None,
-    )
-
-    if names is not None:
-
-        names = [
-            str(x)
-            for x in names
-        ]
-
-        if names:
-            return names
-
-    named_steps = getattr(
-        model,
-        "named_steps",
-        None,
-    )
-
-    if named_steps:
-
-        for _, step in reversed(
-            list(
-                named_steps.items()
-            )
-        ):
-
-            names = getattr(
-                step,
-                "feature_names_in_",
-                None,
-            )
-
-            if names is not None:
-
-                names = [
-                    str(x)
-                    for x in names
-                ]
-
-                if names:
-                    return names
-
-    if artifact_features:
-        return artifact_features
-
-    raise RuntimeError(
-        "Unable to determine the input features expected by the trained model."
-    )
+def safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
 
 
-# ============================================================
-# BUILD MODEL INPUT
-# ============================================================
+def safe_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
 
-def build_model_input(
-    student,
-    model,
-    feature_names,
-):
 
-    expected = get_model_input_features(
-        model,
-        feature_names,
-    )
-
-    values = {
-
-        "age": float(
-            student["age"]
-        ),
-
-        "ug_cgpa": float(
-            student["ug_cgpa"]
-        ),
-
-        "backlogs": float(
-            student["backlogs"]
-        ),
-
-        "internships": float(
-            student["internships"]
-        ),
-
-        "projects": float(
-            student["projects"]
-        ),
-
-        "certifications": float(
-            student["certifications"]
-        ),
-
-        "coding_skills": float(
-            student["coding_skills"]
-        ),
-
-        "communication_skills": float(
-            student[
-                "communication_skills"
-            ]
-        ),
-
-        "aptitude_score": float(
-            student["aptitude_score"]
-        ),
-
-        "domain_skill_1": float(
-            student["domain_scores"][0]
-        ),
-
-        "domain_skill_2": float(
-            student["domain_scores"][1]
-        ),
-
-        "domain_skill_3": float(
-            student["domain_scores"][2]
-        ),
-
-        "domain_skill_4": float(
-            student["domain_scores"][3]
-        ),
-
-        "domain_skill_5": float(
-            student["domain_scores"][4]
-        ),
-
-        "gender": student["gender"],
-
-        "ug_degree": student["ug_degree"],
-
-        "ug_branch": student["ug_branch"],
+def normalize_degree(degree):
+    mapping = {
+        "BE": "BE",
+        "BTech": "BTech",
+        "BSc": "BSc",
+        "BCA": "BCA",
+        "BBA": "BBA",
+        "BCom": "BCom",
+        "BA": "BA",
+        "Other": "Other",
     }
 
-    missing = [
-        feature
-        for feature in expected
-        if feature not in values
+    return mapping.get(degree, degree)
+
+
+def get_model_expected_features():
+    """
+    Find the features expected by the trained model.
+    """
+
+    if hasattr(model, "feature_names_in_"):
+        try:
+            return list(model.feature_names_in_)
+        except Exception:
+            pass
+
+    if feature_names is not None:
+        try:
+            if isinstance(feature_names, dict):
+                if "feature_names" in feature_names:
+                    return list(feature_names["feature_names"])
+
+            if isinstance(feature_names, (list, tuple, np.ndarray)):
+                return list(feature_names)
+        except Exception:
+            pass
+
+    return [
+        "age",
+        "ug_cgpa",
+        "backlogs",
+        "internships",
+        "projects",
+        "certifications",
+        "coding_skills",
+        "communication_skills",
+        "aptitude_score",
+        "domain_skill_1",
+        "domain_skill_2",
+        "domain_skill_3",
+        "domain_skill_4",
+        "domain_skill_5",
+        "gender",
+        "ug_degree",
+        "ug_branch",
     ]
 
-    if missing:
 
-        raise RuntimeError(
-            "The trained model expects features "
-            "that the app cannot construct:\n\n"
-            + "\n".join(
-                f"- {feature}"
-                for feature in missing
-            )
-        )
+def build_model_input(student):
+    """
+    Creates a dataframe matching the trained model's expected
+    feature names.
+    """
 
-    return pd.DataFrame(
-        [
-            {
-                feature: values[feature]
-                for feature in expected
-            }
-        ],
-        columns=expected,
-    )
+    expected = get_model_expected_features()
 
+    row = {}
 
-# ============================================================
-# MODEL CLASS INFORMATION
-# ============================================================
+    for feature in expected:
 
-def get_model_classes(model):
+        if feature in student:
+            row[feature] = student[feature]
 
-    classes = getattr(
-        model,
-        "classes_",
-        None,
-    )
+        else:
+            # Safe defaults for unexpected/missing features.
+            if feature in [
+                "gender",
+                "ug_degree",
+                "ug_branch",
+            ]:
+                row[feature] = "Other"
+            else:
+                row[feature] = 0
 
-    if classes is not None:
-        return list(classes)
-
-    named_steps = getattr(
-        model,
-        "named_steps",
-        None,
-    )
-
-    if named_steps:
-
-        for _, step in reversed(
-            list(
-                named_steps.items()
-            )
-        ):
-
-            classes = getattr(
-                step,
-                "classes_",
-                None,
-            )
-
-            if classes is not None:
-                return list(classes)
-
-    return None
+    return pd.DataFrame([row], columns=expected)
 
 
-# ============================================================
-# GET POSITIVE CLASS PROBABILITY
-# ============================================================
+def get_positive_probability(prediction_model, input_df):
+    """
+    Extract probability for the positive/placed class.
+    """
 
-def get_positive_probability(
-    model,
-    model_input,
-):
+    probabilities = prediction_model.predict_proba(input_df)[0]
 
-    if not hasattr(
-        model,
-        "predict_proba",
-    ):
-        return None
+    classes = getattr(prediction_model, "classes_", None)
 
-    probabilities = np.asarray(
-        model.predict_proba(
-            model_input
-        ),
-        dtype=float,
-    )
+    if classes is None:
+        return float(probabilities[-1])
 
-    if probabilities.ndim != 2:
-        return None
+    positive_indexes = []
 
-    classes = get_model_classes(
-        model
-    )
+    for i, cls in enumerate(classes):
 
-    if classes is not None:
+        if cls in [1, True, "1", "Placed", "placed", "Yes", "yes"]:
+            positive_indexes.append(i)
 
-        preferred_targets = [
-            1,
-            True,
+    if positive_indexes:
+        return float(probabilities[positive_indexes[-1]])
+
+    return float(probabilities[-1])
+
+
+def predict_student(input_df):
+    """
+    Generate placement prediction.
+    """
+
+    probability = get_positive_probability(model, input_df)
+
+    prediction = model.predict(input_df)[0]
+
+    if isinstance(prediction, str):
+        placed = prediction.lower() in [
             "1",
-            "Placed",
-            "PLACED",
-            "Yes",
-            "YES",
+            "true",
+            "yes",
+            "placed",
+            "selected",
         ]
+    else:
+        placed = bool(prediction)
 
-        for target in preferred_targets:
-
-            if target in classes:
-
-                index = classes.index(
-                    target
-                )
-
-                return float(
-                    probabilities[
-                        0,
-                        index,
-                    ]
-                )
-
-    if probabilities.shape[1] == 2:
-
-        return float(
-            probabilities[0, 1]
-        )
-
-    return float(
-        np.max(
-            probabilities[0]
-        )
-    )
+    return placed, probability
 
 
-# ============================================================
-# PREDICTION EXPLANATION
-# ============================================================
-
-def explain_prediction(
-    student
-):
-
+def calculate_profile_summary(student):
     strengths = []
     improvements = []
 
     if student["ug_cgpa"] >= 8:
-
-        strengths.append(
-            f"Strong CGPA: {student['ug_cgpa']:.1f}/10."
-        )
-
-    elif student["ug_cgpa"] < 6.5:
-
-        improvements.append(
-            f"CGPA is {student['ug_cgpa']:.1f}/10. Improving academic performance can strengthen the profile."
-        )
-
-    if student["backlogs"] == 0:
-
-        strengths.append(
-            "No active backlogs."
-        )
-
-    else:
-
-        improvements.append(
-            f"{student['backlogs']} backlog(s) are present."
-        )
-
-    if student["internships"] >= 2:
-
-        strengths.append(
-            f"{student['internships']} internships provide practical exposure."
-        )
-
-    elif student["internships"] == 0:
-
-        improvements.append(
-            "No internships are listed. Practical industry exposure would strengthen the profile."
-        )
-
-    if student["projects"] >= 3:
-
-        strengths.append(
-            f"{student['projects']} projects demonstrate practical work."
-        )
-
-    elif student["projects"] < 2:
-
-        improvements.append(
-            "Add more substantial projects with measurable outcomes."
-        )
-
-    if student["certifications"] >= 2:
-
-        strengths.append(
-            f"{student['certifications']} certifications show additional learning."
-        )
+        strengths.append("Strong academic performance")
+    elif student["ug_cgpa"] < 7:
+        improvements.append("Improve academic performance / CGPA")
 
     if student["coding_skills"] >= 8:
-
-        strengths.append(
-            f"Strong coding/computational skills: {student['coding_skills']}/10."
-        )
-
+        strengths.append("Strong coding skills")
     elif student["coding_skills"] < 6:
+        improvements.append("Strengthen coding fundamentals")
 
-        improvements.append(
-            f"Coding/computational skills are {student['coding_skills']}/10."
-        )
-
-    if (
-        student["communication_skills"]
-        >= 8
-    ):
-
-        strengths.append(
-            f"Strong communication: {student['communication_skills']}/10."
-        )
-
-    elif (
-        student["communication_skills"]
-        < 6
-    ):
-
-        improvements.append(
-            f"Communication is {student['communication_skills']}/10."
-        )
-
-    if student["aptitude_score"] >= 80:
-
-        strengths.append(
-            f"Strong aptitude score: {student['aptitude_score']}/100."
-        )
-
+    if student["aptitude_score"] >= 75:
+        strengths.append("Good aptitude performance")
     elif student["aptitude_score"] < 60:
+        improvements.append("Practice quantitative and logical aptitude")
 
-        improvements.append(
-            f"Aptitude score is {student['aptitude_score']}/100."
-        )
+    if student["communication_skills"] >= 8:
+        strengths.append("Strong communication skills")
+    elif student["communication_skills"] < 6:
+        improvements.append("Improve communication and interview confidence")
 
-    for skill, score in zip(
-        student["branch_skill_names"],
-        student["domain_scores"],
-    ):
+    if student["internships"] >= 2:
+        strengths.append("Good internship exposure")
+    elif student["internships"] == 0:
+        improvements.append("Gain practical internship experience")
 
-        if score >= 8:
+    if student["projects"] >= 3:
+        strengths.append("Good project experience")
+    elif student["projects"] < 2:
+        improvements.append("Build more practical projects")
 
-            strengths.append(
-                f"{skill}: {score}/10."
-            )
+    if student["certifications"] >= 2:
+        strengths.append("Good certification profile")
 
-        elif score <= 4:
+    if student["backlogs"] == 0:
+        strengths.append("No academic backlogs")
+    else:
+        improvements.append("Clear and manage academic backlogs")
 
-            improvements.append(
-                f"{skill}: {score}/10 needs improvement."
-            )
-
-    return (
-        strengths[:6],
-        improvements[:6],
-    )
-
-
-# ============================================================
-# RUN PREDICTION
-# ============================================================
-
-def run_prediction(
-    student
-):
-
-    (
-        model,
-        feature_names,
-        rules,
-        metadata,
-    ) = load_components()
-
-    model_input = build_model_input(
-        student,
-        model,
-        feature_names,
-    )
-
-    prediction = model.predict(
-        model_input
-    )[0]
-
-    probability = get_positive_probability(
-        model,
-        model_input,
-    )
-
-    try:
-
-        placed = (
-            int(prediction) == 1
-        )
-
-    except Exception:
-
-        placed = (
-            str(prediction)
-            .strip()
-            .lower()
-            in {
-                "1",
-                "true",
-                "placed",
-                "yes",
-            }
-        )
-
-    strengths, improvements = (
-        explain_prediction(
-            student
-        )
-    )
-
-    return {
-
-        "prediction": prediction,
-
-        "placed": placed,
-
-        "probability": probability,
-
-        "model_input": model_input,
-
-        "feature_names": feature_names,
-
-        "metadata": metadata,
-
-        "strengths": strengths,
-
-        "improvements": improvements,
-    }
-
-
-# ============================================================
-# SECRETS
-# ============================================================
-
-def get_secret(name):
-
-    try:
-
-        value = st.secrets.get(
-            name,
-            "",
-        )
-
-        if value:
-            return str(value).strip()
-
-    except Exception:
-        pass
-
-    value = os.getenv(
-        name,
-        "",
-    )
-
-    return str(value).strip()
+    return strengths, improvements
 
 
 # ============================================================
 # GEMINI AI
 # ============================================================
 
-def generate_with_gemini(
-    prompt
-):
+def call_gemini(prompt, api_key):
+    """
+    Calls Gemini directly through the REST API.
 
-    api_key = get_secret(
-        "GEMINI_API_KEY"
-    )
-
-    if not api_key:
-
-        raise RuntimeError(
-            "GEMINI_API_KEY is not configured in Streamlit Secrets."
-        )
-
-    # Current model first.
-    # If the account does not have access to it,
-    # automatically try the next supported model.
+    Newer Gemini models are attempted first.
+    """
 
     models_to_try = [
         "gemini-3.5-flash",
@@ -1288,21 +397,18 @@ def generate_with_gemini(
         "gemini-3.7-flash",
     ]
 
-    errors = []
+    last_error = None
 
     for model_name in models_to_try:
 
         url = (
             "https://generativelanguage.googleapis.com/"
-            "v1beta/models/"
-            f"{model_name}:generateContent"
+            f"v1beta/models/{model_name}:generateContent"
             f"?key={api_key}"
         )
 
         payload = {
-
             "contents": [
-
                 {
                     "parts": [
                         {
@@ -1310,873 +416,626 @@ def generate_with_gemini(
                         }
                     ]
                 }
-
             ],
-
             "generationConfig": {
-
-                "temperature": 0.4,
-
-                "maxOutputTokens": 3500,
+                "temperature": 0.55,
+                "maxOutputTokens": 7000,
             },
         }
 
+        data = json.dumps(payload).encode("utf-8")
+
         request = urllib.request.Request(
-
             url,
-
-            data=json.dumps(
-                payload
-            ).encode(
-                "utf-8"
-            ),
-
+            data=data,
             headers={
-                "Content-Type":
-                    "application/json",
-
-                "Accept":
-                    "application/json",
-
-                "User-Agent":
-                    "AI-Student-Placement-Predictor/1.0",
+                "Content-Type": "application/json",
+                "User-Agent": "AI-Student-Placement-Predictor/1.0",
             },
-
             method="POST",
         )
 
         try:
+            with urllib.request.urlopen(request, timeout=60) as response:
 
-            with urllib.request.urlopen(
-                request,
-                timeout=60,
-            ) as response:
-
-                raw = (
-                    response
-                    .read()
-                    .decode(
-                        "utf-8",
-                        errors="replace",
-                    )
+                response_data = json.loads(
+                    response.read().decode("utf-8")
                 )
 
-                data = json.loads(
-                    raw
-                )
+                candidates = response_data.get("candidates", [])
 
-            candidates = data.get(
-                "candidates",
-                [],
+                if not candidates:
+                    last_error = "Gemini returned no candidates."
+                    continue
+
+                content = candidates[0].get("content", {})
+
+                parts = content.get("parts", [])
+
+                text_parts = []
+
+                for part in parts:
+                    if "text" in part:
+                        text_parts.append(part["text"])
+
+                result = "\n".join(text_parts).strip()
+
+                if result:
+                    return result
+
+                last_error = "Gemini returned an empty response."
+
+        except urllib.error.HTTPError as e:
+
+            try:
+                error_body = e.read().decode("utf-8")
+            except Exception:
+                error_body = str(e)
+
+            last_error = (
+                f"Gemini HTTP {e.code}: {error_body}"
             )
 
-            if not candidates:
+            continue
 
-                errors.append(
-                    f"{model_name}: empty candidates response"
-                )
-
-                continue
-
-            parts = (
-                candidates[0]
-                .get("content", {})
-                .get("parts", [])
-            )
-
-            text_parts = []
-
-            for part in parts:
-
-                if "text" in part:
-
-                    text_parts.append(
-                        part["text"]
-                    )
-
-            result = "\n".join(
-                text_parts
-            ).strip()
-
-            if result:
-
-                return (
-                    result,
-                    model_name,
-                )
-
-            errors.append(
-                f"{model_name}: empty text response"
-            )
-
-        except urllib.error.HTTPError as exc:
-
-            details = (
-                exc.read()
-                .decode(
-                    "utf-8",
-                    errors="replace",
-                )
-            )
-
-            errors.append(
-                f"{model_name}: HTTP {exc.code}: {details}"
-            )
-
-        except urllib.error.URLError as exc:
-
-            errors.append(
-                f"{model_name}: connection error: {exc.reason}"
-            )
-
-        except Exception as exc:
-
-            errors.append(
-                f"{model_name}: {exc}"
-            )
+        except Exception as e:
+            last_error = str(e)
+            continue
 
     raise RuntimeError(
-        "Gemini AI could not generate guidance.\n\n"
-        + "\n".join(errors)
+        last_error
+        or "Gemini could not generate guidance."
     )
 
 
-# ============================================================
-# AI PROMPT
-# ============================================================
-
-def build_ai_prompt(
+def generate_ai_guidance(
     student,
-    prediction_context,
+    probability,
+    prediction_label,
+    career_interest,
+    target_goal,
+    pg_degree,
 ):
+    """
+    Creates detailed personalized placement and career guidance.
+    """
 
-    skills_text = "\n".join(
+    if not gemini_key:
+        return None
 
-        f"- {skill}: {score}/10"
+    domain_skills = {
+        "DSA / Problem Solving": student["domain_skill_1"],
+        "Machine Learning": student["domain_skill_2"],
+        "System Design": student["domain_skill_3"],
+        "Hackathons": student["domain_skill_4"],
+        "Open Source": student["domain_skill_5"],
+    }
 
-        for skill, score in zip(
+    prompt = f"""
+You are an expert student career advisor, placement mentor,
+technical recruiter and career-roadmap planner.
 
-            student["branch_skill_names"],
-
-            student["domain_scores"],
-        )
-    )
-
-    return f"""
-You are an expert student placement advisor and career mentor.
-
-Create personalized, practical placement guidance.
-
-Never guarantee employment.
-
-Never invent student achievements.
-
-Use ONLY the student's supplied information.
+You are advising a college student based on the following profile.
 
 STUDENT PROFILE
+---------------
+Age: {student["age"]}
+Gender: {student["gender"]}
 
-Age:
-{student["age"]}
+UG Degree: {student["ug_degree"]}
+UG Branch: {student["ug_branch"]}
+UG CGPA: {student["ug_cgpa"]}
 
-Gender:
-{student["gender"]}
+Postgraduate Degree:
+{pg_degree if pg_degree else "No postgraduate degree selected"}
 
-Education Level:
-{student["education_level"]}
+Backlogs: {student["backlogs"]}
+Internships: {student["internships"]}
+Projects: {student["projects"]}
+Certifications: {student["certifications"]}
 
-Degree:
-{student["ug_degree"]}
+Coding Skills: {student["coding_skills"]}/10
+Communication Skills: {student["communication_skills"]}/10
+Aptitude Score: {student["aptitude_score"]}/100
 
-Branch:
-{student["ug_branch"]}
+Domain Skills:
+DSA / Problem Solving: {domain_skills["DSA / Problem Solving"]}/10
+Machine Learning: {domain_skills["Machine Learning"]}/10
+System Design: {domain_skills["System Design"]}/10
+Hackathons: {domain_skills["Hackathons"]}/10
+Open Source: {domain_skills["Open Source"]}/10
 
-CGPA:
-{student["ug_cgpa"]:.1f}/10
+PLACEMENT MODEL
+---------------
+Placement prediction: {prediction_label}
+Placement probability: {probability:.1f}%
 
-Backlogs:
-{student["backlogs"]}
+CAREER PREFERENCES
+------------------
+Career Interest: {career_interest}
+Target Career Goal: {target_goal}
 
-Internships:
-{student["internships"]}
+IMPORTANT INSTRUCTIONS
+---------------------
+Give practical and personalized advice.
 
-Projects:
-{student["projects"]}
+Do NOT give generic motivational paragraphs.
 
-Certifications:
-{student["certifications"]}
+The response must be highly structured and should connect the
+student's career interest and target goal to specific job roles,
+skills, employers, projects and an actionable 30-day plan.
 
-Coding / Computational Skills:
-{student["coding_skills"]}/10
+Use the following exact sections.
 
-Communication Skills:
-{student["communication_skills"]}/10
+1. PREDICTION INTERPRETATION
 
-Aptitude:
-{student["aptitude_score"]}/100
+Explain what the placement prediction means.
 
-Career Interest:
-{student["career_interest"]}
+Mention that the probability is a machine-learning estimate,
+not a guaranteed employment probability.
 
-Target Career:
-{student["target_career_goal"] or "Not specified"}
+Explain the important profile factors that may have influenced
+the prediction.
 
-BRANCH-SPECIFIC DOMAIN SKILLS
+2. CAREER PATH
 
-{skills_text}
+Create a career-path table with these columns:
 
-ML PLACEMENT PREDICTION
+Path | Typical Role | Core Responsibilities | Typical Employers
 
-{prediction_context}
+Include career paths that are relevant to the student's selected
+Career Interest and Target Career Goal.
 
-Give guidance using EXACTLY these sections:
+For example, if the student is interested in Data Analytics,
+consider paths such as:
 
-## 1. Prediction Interpretation
+Data Analyst (Entry-Level)
+Business Intelligence (BI) Analyst
+Analytics Engineer
+Product Analyst
+Junior Data Scientist
+Data Science Intern
 
-Explain what the model prediction means in simple language.
+Do NOT blindly include irrelevant roles.
 
-Do not describe it as a guarantee.
+Explain which 2-4 paths are most aligned with the student's
+current profile, without ranking them as universally better.
 
-## 2. Why The Model May Have Predicted This
+3. TARGET ROLE EXPLANATION
 
-Discuss the strongest positive and negative factors visible in the profile.
+For the selected target career goal explain:
 
-## 3. Career Direction
+- What the role does
+- Typical daily work
+- Important technical skills
+- Important soft skills
+- Common tools
+- Interview topics
+- Entry-level expectations
 
-Recommend suitable career directions based on the student's education, branch and stated interest.
+4. CURRENT STRENGTHS
 
-## 4. Top Strengths
+List the student's strongest areas using their actual scores.
 
-List the student's strongest areas.
+Explain how each strength can help during placements.
 
-## 5. Important Skill Gaps
+5. SKILL GAPS
 
-List the most important areas to improve.
+Identify the most important skills that need improvement.
 
-## 6. What To Improve First
+Use the student's actual scores.
 
-Give the top priorities in order of practical importance.
+For each skill gap explain:
 
-## 7. 30-Day Placement Plan
+Current level
+Target level
+Why it matters
+How to improve it
 
-Week 1:
-Week 2:
-Week 3:
-Week 4:
+6. TOOLS AND TECHNOLOGIES
 
-Make the plan specific.
+Create a practical list of tools and technologies the student
+should learn for their selected target career.
 
-## 8. Technical Topics To Study
+Group them under:
 
-Give branch-specific topics.
+Programming
+Databases / SQL
+Data / Analytics
+Cloud
+Visualization
+Development
+Version Control
+Interview Preparation
 
-## 9. Tools And Technologies
+Only include technologies relevant to the chosen career.
 
-Give relevant tools and technologies.
+7. 30-DAY IMPROVEMENT PLAN
 
-## 10. Three Recommended Projects
+Create a detailed table with:
 
-Give EXACTLY 3 project ideas.
+Day | Goal | Activity | Expected Outcome
 
-For every project include:
+Use multiple phases such as:
 
-Project:
+Day 1-3
+Day 4-7
+Day 8-12
+Day 13-17
+Day 18-22
+Day 23-26
+Day 27-30
+
+The plan must be realistic for a college student.
+
+For example, for a Data Analyst path:
+
+Day 1-3:
+Choose primary visualization tool.
+Audit tools.
+Install Tableau Public / Power BI.
+Complete beginner tutorials.
+
+Day 4-7:
+SQL deep dive.
+Practice CTEs, joins, aggregations and window functions.
+Build a small SQLite/PostgreSQL database.
+
+Day 8-12:
+Statistics refresher.
+Practice descriptive statistics, probability,
+hypothesis testing and A/B testing.
+
+Day 13-17:
+Business/domain immersion.
+Choose an industry and identify KPIs.
+
+Day 18-22:
+Start Project #1.
+Commit code to GitHub.
+Create README.
+
+Day 23-26:
+Improve project.
+Create dashboard.
+Document findings.
+
+Day 27-30:
+Resume + GitHub + interview preparation.
+
+Adapt the plan to the student's actual target career.
+
+8. TECHNICAL STUDY PLAN
+
+Give specific topics to study.
+
+For example:
+
+SQL:
+- SELECT
+- JOIN
+- GROUP BY
+- CTEs
+- Window Functions
+- Subqueries
+- Query optimization
+
+But customize the list to the target career.
+
+9. INTERVIEW PREPARATION
+
+Give:
+
+Technical questions
+Coding topics
+Domain questions
+HR questions
+Resume questions
+Project questions
+
+Also provide 5 sample interview questions with short guidance
+on how the student should answer.
+
+10. PROJECT IDEAS
+
+Give exactly 3 practical projects.
+
+Create a table:
+
+# | Title | What To Build / Do | Skills Demonstrated | Why It's Relevant
+
+Projects must match the selected career.
+
+For Data Analytics, for example:
+
+Project 1:
+E-Commerce Sales Dashboard
+
 What to build:
-Skills demonstrated:
-Why it helps:
+Use a public e-commerce dataset such as Online Retail,
+clean it, create a relational/star-schema model,
+use PostgreSQL/SQLite and create a Tableau/Power BI dashboard
+showing revenue trends, top products, customer segmentation
+and cohort analysis.
 
-## 11. Interview Preparation
+Skills:
+SQL, CTEs, window functions, data modeling, ETL,
+Tableau/Power BI, storytelling.
 
-Include technical interview, aptitude and HR/interview preparation.
+Why relevant:
+Shows an end-to-end analytics workflow.
 
-Keep the advice practical and student-friendly.
+Project 2:
+A/B Testing Analysis
+
+Project 3:
+Customer Churn / Business KPI Analytics
+
+For other careers, create equally relevant projects.
+
+11. GITHUB PORTFOLIO PLAN
+
+Tell the student what their GitHub should contain.
+
+Include:
+
+- README
+- project screenshots
+- clean source code
+- requirements.txt
+- dataset explanation
+- results
+- architecture / workflow
+- demo link where applicable
+
+12. RESUME PLAN
+
+Give specific resume improvements for the selected target role.
+
+Show examples of strong bullet points using action + technology
++ measurable result where possible.
+
+13. WEEKLY CAREER ROADMAP
+
+Give a concise 3-month roadmap:
+
+Month 1
+Month 2
+Month 3
+
+14. FINAL ACTION CHECKLIST
+
+Give 10 concrete actions the student should take next.
+
+Keep the advice practical, specific and personalized.
+
+Do not claim that completing these actions guarantees placement.
+
+Formatting:
+Use Markdown.
+Use tables where requested.
+Use bullet points.
+Keep the response detailed enough to be genuinely useful.
 """
 
 
-# ============================================================
-# STUDENT PROFILE
-# ============================================================
-
-def build_student_profile(
-
-    education_level,
-
-    gender,
-
-    age,
-
-    degree,
-
-    branch,
-
-    cgpa,
-
-    backlogs,
-
-    internships,
-
-    projects,
-
-    certifications,
-
-    coding_skills,
-
-    communication_skills,
-
-    aptitude_score,
-
-    career_interest,
-
-    target_career_goal,
-
-    branch_skill_names,
-
-    domain_scores,
-):
-
-    return {
-
-        "education_level":
-            education_level,
-
-        "gender":
-            gender,
-
-        "age":
-            int(age),
-
-        "ug_degree":
-            degree,
-
-        "ug_branch":
-            branch,
-
-        "ug_cgpa":
-            float(cgpa),
-
-        "backlogs":
-            int(backlogs),
-
-        "internships":
-            int(internships),
-
-        "projects":
-            int(projects),
-
-        "certifications":
-            int(certifications),
-
-        "coding_skills":
-            int(coding_skills),
-
-        "communication_skills":
-            int(
-                communication_skills
-            ),
-
-        "aptitude_score":
-            int(
-                aptitude_score
-            ),
-
-        "career_interest":
-            career_interest,
-
-        "target_career_goal":
-            target_career_goal.strip(),
-
-        "branch_skill_names":
-            branch_skill_names,
-
-        "domain_scores":
-            domain_scores,
-    }
+    return call_gemini(prompt, gemini_key)
 
 
 # ============================================================
-# PAGE HEADER
+# INPUT FORM
 # ============================================================
 
-st.title(
-    "🎓 AI Student Placement Predictor"
+st.markdown(
+    '<div class="section-title">👨‍🎓 Student Information</div>',
+    unsafe_allow_html=True,
 )
 
-st.write(
-    "Predict placement outcomes using machine learning "
-    "and receive personalized AI career guidance."
-)
+col1, col2, col3 = st.columns(3)
 
-st.info(
-    "⚠️ The placement percentage is a model-estimated probability "
-    "based on the training data. It is not a guaranteed employment probability."
-)
-
-
-# ============================================================
-# SIDEBAR STATUS
-# ============================================================
-
-with st.sidebar:
-
-    st.header(
-        "🔧 System Status"
-    )
-
-    try:
-
-        (
-            model,
-            feature_names,
-            rules,
-            metadata,
-        ) = load_components()
-
-        st.success(
-            "✅ ML model loaded"
-        )
-
-        model_features = (
-            get_model_input_features(
-                model,
-                feature_names,
-            )
-        )
-
-        st.write(
-            f"Model features: **{len(model_features)}**"
-        )
-
-        if metadata:
-
-            st.write(
-                "Model:",
-                metadata.get(
-                    "model_name",
-                    "Trained model",
-                ),
-            )
-
-            st.write(
-                "Dataset rows:",
-                metadata.get(
-                    "dataset_size",
-                    "Available in metadata",
-                ),
-            )
-
-    except Exception as exc:
-
-        st.error(
-            "❌ ML model loading failed"
-        )
-
-        st.code(
-            str(exc)
-        )
-
-    st.divider()
-
-    st.subheader(
-        "🤖 AI Guidance"
-    )
-
-    if get_secret(
-        "GEMINI_API_KEY"
-    ):
-
-        st.success(
-            "Gemini API configured"
-        )
-
-    else:
-
-        st.warning(
-            "GEMINI_API_KEY not configured"
-        )
-
-    st.caption(
-        "AI guidance uses Gemini. "
-        "Groq is not required."
-    )
-
-
-# ============================================================
-# EDUCATION
-# ============================================================
-
-st.header(
-    "📋 Student Profile"
-)
-
-st.subheader(
-    "🎓 Education"
-)
-
-education_level = st.radio(
-
-    "Education Level",
-
-    [
-        "Undergraduate",
-        "Postgraduate",
-    ],
-
-    horizontal=True,
-)
-
-
-# Degree options depend on education level.
-
-if education_level == "Undergraduate":
-
-    degree_options = [
-        "BE",
-        "BTech",
-        "BSc",
-        "BCA",
-        "BBA",
-        "BCom",
-        "BA",
-        "Other",
-    ]
-
-else:
-
-    degree_options = PG_DEGREES
-
-
-c1, c2, c3 = st.columns(3)
-
-
-with c1:
-
-    degree = st.selectbox(
-        "Degree",
-        degree_options,
-    )
-
-
-with c2:
-
+with col1:
     age = st.number_input(
-
         "Age",
-
         min_value=16,
-
-        max_value=60,
-
+        max_value=40,
         value=21,
+        step=1,
     )
-
-
-with c3:
 
     gender = st.selectbox(
-
         "Gender",
-
         [
             "Male",
             "Female",
+            "Other",
+            "Prefer not to say",
+        ],
+    )
+
+with col2:
+    ug_degree = st.selectbox(
+        "UG Degree",
+        [
+            "BE",
+            "BTech",
+            "BSc",
+            "BCA",
+            "BBA",
+            "BCom",
+            "BA",
+            "Other",
+        ],
+    )
+
+    ug_branch = st.selectbox(
+        "UG Branch",
+        [
+            "Computer Science",
+            "Information Technology",
+            "Artificial Intelligence",
+            "Artificial Intelligence and Machine Learning",
+            "Data Science",
+            "Computer Science and Engineering",
+            "Electronics and Communication",
+            "Electrical Engineering",
+            "Mechanical Engineering",
+            "Civil Engineering",
+            "Information Science",
+            "Cyber Security",
             "Other",
         ],
     )
 
 
 # ============================================================
-# BRANCH
+# PG FLOW
 # ============================================================
 
-branches = [
+st.markdown(
+    '<div class="section-title">🎓 Postgraduate Education</div>',
+    unsafe_allow_html=True,
+)
 
-    "Computer Science",
+st.info(
+    "First select your UG details above. If you have completed or "
+    "are pursuing a postgraduate degree, choose Yes below. "
+    "The PG degree option will appear only after that."
+)
 
-    "Information Technology",
+has_pg = st.radio(
+    "Have you completed or are you currently pursuing a PG degree?",
+    [
+        "No",
+        "Yes",
+    ],
+    horizontal=True,
+)
 
-    "Data Science",
+pg_degree = None
 
-    "Artificial Intelligence",
+if has_pg == "Yes":
 
-    "Machine Learning",
+    pg_degree = st.selectbox(
+        "PG Degree",
+        [
+            "MTech",
+            "ME",
+            "MSc",
+            "MCA",
+            "MBA",
+            "MCom",
+            "MA",
+            "MS",
+            "Other",
+        ],
+    )
 
-    "Cyber Security",
+    st.success(
+        f"PG selected: {pg_degree}"
+    )
 
-    "Software Engineering",
+else:
 
-    "Computer Applications",
-
-    "Mechanical Engineering",
-
-    "Automobile Engineering",
-
-    "Production Engineering",
-
-    "Industrial Engineering",
-
-    "Aeronautical Engineering",
-
-    "Aerospace Engineering",
-
-    "Electrical Engineering",
-
-    "Electronics Engineering",
-
-    "Electronics and Communication Engineering",
-
-    "Biomedical Engineering",
-
-    "Civil Engineering",
-
-    "Chemical Engineering",
-
-    "Mathematics",
-
-    "Statistics",
-
-    "Physics",
-
-    "Chemistry",
-
-    "Environmental Science",
-
-    "Biotechnology",
-
-    "Microbiology",
-
-    "Biochemistry",
-
-    "Biological Sciences",
-
-    "Life Sciences",
-
-    "Genetics",
-
-    "Botany",
-
-    "Zoology",
-
-    "Food Science and Nutrition",
-
-    "Food Technology",
-
-    "Nutrition and Dietetics",
-
-    "Economics",
-
-    "Commerce",
-
-    "Business Administration",
-
-    "Finance",
-
-    "Accounting",
-
-    "Management",
-
-    "Marketing",
-
-    "Human Resources",
-
-    "Psychology",
-
-    "English",
-
-    "Political Science",
-
-    "Sociology",
-
-    "History",
-
-    "Public Administration",
-
-    "Other",
-]
-
-
-c1, c2 = st.columns(2)
-
-
-with c1:
-
-    branch = st.selectbox(
-
-        "Branch / Major",
-
-        branches,
+    st.caption(
+        "No PG degree selected. You can continue with your UG profile."
     )
 
 
-with c2:
+# ============================================================
+# ACADEMIC / PLACEMENT DETAILS
+# ============================================================
 
-    cgpa = st.number_input(
+st.markdown(
+    '<div class="section-title">📚 Academic & Placement Profile</div>',
+    unsafe_allow_html=True,
+)
 
-        "CGPA",
+col1, col2, col3 = st.columns(3)
 
+with col1:
+
+    ug_cgpa = st.number_input(
+        "UG CGPA",
         min_value=0.0,
-
         max_value=10.0,
-
         value=7.5,
-
         step=0.1,
     )
 
-
-# ============================================================
-# PLACEMENT PROFILE
-# ============================================================
-
-st.subheader(
-    "💼 Placement Profile"
-)
-
-c1, c2, c3, c4 = st.columns(4)
-
-
-with c1:
-
     backlogs = st.number_input(
-
         "Backlogs",
-
         min_value=0,
-
         max_value=20,
-
         value=0,
+        step=1,
     )
 
-
-with c2:
+with col2:
 
     internships = st.number_input(
-
         "Internships",
-
         min_value=0,
-
-        max_value=20,
-
+        max_value=10,
         value=1,
+        step=1,
     )
-
-
-with c3:
 
     projects = st.number_input(
-
         "Projects",
-
         min_value=0,
-
-        max_value=30,
-
+        max_value=20,
         value=2,
+        step=1,
     )
 
-
-with c4:
+with col3:
 
     certifications = st.number_input(
-
         "Certifications",
-
         min_value=0,
-
-        max_value=30,
-
+        max_value=20,
         value=1,
+        step=1,
     )
 
 
 # ============================================================
-# GENERAL SKILLS
+# SKILLS
 # ============================================================
 
-st.subheader(
-    "🧠 General Skills"
+st.markdown(
+    '<div class="section-title">💻 Technical & Professional Skills</div>',
+    unsafe_allow_html=True,
 )
 
-c1, c2, c3 = st.columns(3)
+col1, col2 = st.columns(2)
 
-
-with c1:
+with col1:
 
     coding_skills = st.slider(
-
-        "Coding / Computational Skills",
-
-        min_value=1,
-
-        max_value=10,
-
-        value=7,
+        "Coding Skills",
+        min_value=0.0,
+        max_value=10.0,
+        value=7.0,
+        step=0.5,
     )
-
-
-with c2:
 
     communication_skills = st.slider(
-
         "Communication Skills",
-
-        min_value=1,
-
-        max_value=10,
-
-        value=7,
+        min_value=0.0,
+        max_value=10.0,
+        value=7.0,
+        step=0.5,
     )
 
-
-with c3:
+with col2:
 
     aptitude_score = st.slider(
-
         "Aptitude Score",
-
         min_value=0,
-
         max_value=100,
-
         value=70,
-    )
-
-
-# ============================================================
-# CAREER
-# ============================================================
-
-st.subheader(
-    "🧭 Career Direction"
-)
-
-career_options = get_career_interests(
-    branch
-)
-
-c1, c2 = st.columns(2)
-
-
-with c1:
-
-    career_interest = st.selectbox(
-
-        "Career Interest",
-
-        career_options,
-    )
-
-
-with c2:
-
-    target_career_goal = st.text_input(
-
-        "Target Career Goal",
-
-        placeholder=(
-            "Example: Software Developer, "
-            "Data Analyst, ML Engineer"
-        ),
+        step=1,
     )
 
 
@@ -2184,338 +1043,358 @@ with c2:
 # DOMAIN SKILLS
 # ============================================================
 
-st.subheader(
-    f"📊 {branch} — Core Domain Skills"
+st.markdown(
+    '<div class="section-title">🧠 Domain Skills</div>',
+    unsafe_allow_html=True,
 )
 
-st.caption(
-    "Rate your current knowledge from 1 to 10."
-)
+col1, col2, col3, col4, col5 = st.columns(5)
 
-branch_skill_names = get_branch_skills(
-    branch
-)
+with col1:
+    dsa_score = st.slider(
+        "DSA / Problem Solving",
+        0.0,
+        10.0,
+        7.0,
+        0.5,
+    )
 
-domain_scores = []
+with col2:
+    ml_knowledge = st.slider(
+        "Machine Learning",
+        0.0,
+        10.0,
+        6.5,
+        0.5,
+    )
 
-skill_columns = st.columns(
-    3
-)
+with col3:
+    system_design = st.slider(
+        "System Design",
+        0.0,
+        10.0,
+        6.0,
+        0.5,
+    )
 
-for index, skill in enumerate(
-    branch_skill_names
-):
+with col4:
+    hackathons = st.slider(
+        "Hackathons",
+        0.0,
+        10.0,
+        5.0,
+        0.5,
+    )
 
-    with skill_columns[
-        index % 3
-    ]:
-
-        score = st.slider(
-
-            skill,
-
-            min_value=1,
-
-            max_value=10,
-
-            value=5,
-
-            key=(
-                f"{branch}_{skill}"
-            ),
-        )
-
-        domain_scores.append(
-            int(score)
-        )
+with col5:
+    open_source = st.slider(
+        "Open Source",
+        0.0,
+        10.0,
+        4.0,
+        0.5,
+    )
 
 
 # ============================================================
-# STUDENT OBJECT
+# CAREER PREFERENCES
 # ============================================================
 
-student = build_student_profile(
+st.markdown(
+    '<div class="section-title">🚀 Career Preferences</div>',
+    unsafe_allow_html=True,
+)
 
-    education_level=
-        education_level,
+career_interest = st.selectbox(
+    "Career Interest",
+    [
+        "Software Development",
+        "Data Analytics",
+        "Data Science",
+        "Artificial Intelligence / Machine Learning",
+        "Business Intelligence",
+        "Cloud / DevOps",
+        "Cyber Security",
+        "Web Development",
+        "Mobile App Development",
+        "Product Management",
+        "Business Analysis",
+        "Other",
+    ],
+)
 
-    gender=
-        gender,
+career_goal_options = {
+    "Software Development": [
+        "Software Engineer",
+        "Backend Developer",
+        "Frontend Developer",
+        "Full Stack Developer",
+        "Java Developer",
+        "Python Developer",
+        "Software Development Intern",
+    ],
 
-    age=
-        age,
+    "Data Analytics": [
+        "Data Analyst",
+        "Business Analyst",
+        "Business Intelligence Analyst",
+        "Product Analyst",
+        "Analytics Engineer",
+    ],
 
-    degree=
-        degree,
+    "Data Science": [
+        "Junior Data Scientist",
+        "Data Science Intern",
+        "Machine Learning Analyst",
+        "Applied Data Scientist",
+    ],
 
-    branch=
-        branch,
+    "Artificial Intelligence / Machine Learning": [
+        "ML Engineer",
+        "AI Engineer",
+        "Machine Learning Intern",
+        "Applied AI Engineer",
+        "NLP Engineer",
+    ],
 
-    cgpa=
-        cgpa,
+    "Business Intelligence": [
+        "BI Analyst",
+        "BI Developer",
+        "Reporting Analyst",
+        "Business Intelligence Engineer",
+    ],
 
-    backlogs=
-        backlogs,
+    "Cloud / DevOps": [
+        "Cloud Engineer",
+        "DevOps Engineer",
+        "Cloud Support Engineer",
+        "Site Reliability Engineer",
+    ],
 
-    internships=
-        internships,
+    "Cyber Security": [
+        "Security Analyst",
+        "SOC Analyst",
+        "Cyber Security Engineer",
+        "Security Operations Intern",
+    ],
 
-    projects=
-        projects,
+    "Web Development": [
+        "Frontend Developer",
+        "Backend Developer",
+        "Full Stack Developer",
+        "Web Developer",
+    ],
 
-    certifications=
-        certifications,
+    "Mobile App Development": [
+        "Android Developer",
+        "iOS Developer",
+        "Flutter Developer",
+        "React Native Developer",
+    ],
 
-    coding_skills=
-        coding_skills,
+    "Product Management": [
+        "Associate Product Manager",
+        "Product Analyst",
+        "Product Management Intern",
+    ],
 
-    communication_skills=
-        communication_skills,
+    "Business Analysis": [
+        "Business Analyst",
+        "Junior Business Analyst",
+        "Business Operations Analyst",
+        "Business Analysis Intern",
+    ],
 
-    aptitude_score=
-        aptitude_score,
+    "Other": [
+        "Entry-Level Technology Role",
+        "Graduate Trainee",
+        "Internship",
+        "Other",
+    ],
+}
 
-    career_interest=
+target_goal = st.selectbox(
+    "Target Career Goal",
+    career_goal_options.get(
         career_interest,
-
-    target_career_goal=
-        target_career_goal,
-
-    branch_skill_names=
-        branch_skill_names,
-
-    domain_scores=
-        domain_scores,
+        ["Entry-Level Technology Role"],
+    ),
 )
 
 
 # ============================================================
-# BUTTONS
+# BUILD STUDENT PROFILE
 # ============================================================
 
-st.divider()
+student = {
+    "age": int(age),
+    "gender": gender,
+    "ug_degree": normalize_degree(ug_degree),
+    "ug_branch": ug_branch,
 
-c1, c2 = st.columns(2)
+    "ug_cgpa": float(ug_cgpa),
+    "backlogs": int(backlogs),
+    "internships": int(internships),
+    "projects": int(projects),
+    "certifications": int(certifications),
 
+    "coding_skills": float(coding_skills),
+    "communication_skills": float(communication_skills),
+    "aptitude_score": float(aptitude_score),
 
-with c1:
-
-    predict_button = st.button(
-
-        "🔮 Predict Placement",
-
-        use_container_width=True,
-
-        type="primary",
-    )
-
-
-with c2:
-
-    ai_button = st.button(
-
-        "🤖 Generate AI Guidance",
-
-        use_container_width=True,
-    )
+    "domain_skill_1": float(dsa_score),
+    "domain_skill_2": float(ml_knowledge),
+    "domain_skill_3": float(system_design),
+    "domain_skill_4": float(hackathons),
+    "domain_skill_5": float(open_source),
+}
 
 
 # ============================================================
-# PREDICT
+# PREDICTION
 # ============================================================
+
+st.markdown(
+    '<div class="section-title">🔮 Placement Prediction</div>',
+    unsafe_allow_html=True,
+)
+
+predict_button = st.button(
+    "🔮 Predict Placement",
+    type="primary",
+    use_container_width=True,
+)
+
 
 if predict_button:
 
+    if not model_loaded:
+        st.error(
+            "The placement model could not be loaded. "
+            "Please check the model files."
+        )
+        st.stop()
+
     try:
 
-        with st.spinner(
-            "Running placement prediction..."
-        ):
+        model_input = build_model_input(student)
 
-            result = run_prediction(
-                student
-            )
+        placed, probability = predict_student(model_input)
 
-        st.session_state.prediction_result = (
-            result
+        prediction_label = (
+            "Placement Likely"
+            if placed
+            else "Needs Further Preparation"
         )
 
-        st.session_state.student_profile = (
-            student
-        )
+        st.session_state["prediction_probability"] = probability
+        st.session_state["prediction_label"] = prediction_label
+        st.session_state["student"] = student
+        st.session_state["career_interest"] = career_interest
+        st.session_state["target_goal"] = target_goal
+        st.session_state["pg_degree"] = pg_degree
 
-        st.session_state.ai_guidance = None
-
-        st.session_state.ai_provider = None
-
-    except Exception as exc:
-
-        st.session_state.prediction_result = None
+    except Exception as e:
 
         st.error(
-            "❌ Placement prediction failed."
-        )
-
-        st.code(
-            str(exc)
+            f"Prediction failed: {e}"
         )
 
 
 # ============================================================
-# PREDICTION RESULT
+# DISPLAY PREDICTION
 # ============================================================
 
-result = (
-    st.session_state.prediction_result
-)
+if "prediction_probability" in st.session_state:
 
+    probability = st.session_state["prediction_probability"]
 
-if result is not None:
+    prediction_label = st.session_state["prediction_label"]
 
-    st.divider()
-
-    st.header(
-        "🎯 Placement Prediction"
+    st.markdown(
+        '<div class="prediction-box">',
+        unsafe_allow_html=True,
     )
 
-    probability = result[
-        "probability"
-    ]
+    col1, col2 = st.columns(2)
 
-    if probability is not None:
+    with col1:
 
-        probability_pct = (
-            probability * 100
-        )
-
-    else:
-
-        probability_pct = None
-
-
-    c1, c2 = st.columns(2)
-
-
-    with c1:
-
-        if result["placed"]:
-
+        if probability >= 0.5:
             st.success(
-                "🟢 MODEL CLASSIFICATION: PLACED"
+                f"### ✅ {prediction_label}"
             )
-
         else:
-
             st.warning(
-                "🟡 MODEL CLASSIFICATION: NOT PLACED"
+                f"### 📚 {prediction_label}"
             )
 
+    with col2:
 
-    with c2:
-
-        if probability_pct is not None:
-
-            st.metric(
-
-                "Placement Probability",
-
-                f"{probability_pct:.2f}%",
-
-            )
-
-        else:
-
-            st.metric(
-
-                "Placement Probability",
-
-                "Unavailable",
-
-            )
-
-
-    if probability is not None:
-
-        st.progress(
-
-            float(
-                np.clip(
-                    probability,
-                    0,
-                    1,
-                )
-            )
-
+        st.metric(
+            "Placement Probability",
+            f"{probability * 100:.1f}%",
         )
 
-        st.caption(
-            "Calibrated probability from the trained ML model."
-        )
-
-
-    st.subheader(
-        "🔍 Prediction Interpretation"
+    st.progress(
+        min(max(probability, 0.0), 1.0)
     )
-
-
-    if probability_pct is not None:
-
-        if probability_pct >= 75:
-
-            st.success(
-                f"The model estimates a relatively high positive-class probability of {probability_pct:.2f}%."
-            )
-
-        elif probability_pct >= 50:
-
-            st.info(
-                f"The model estimates a moderate positive-class probability of {probability_pct:.2f}%."
-            )
-
-        else:
-
-            st.warning(
-                f"The model estimates a lower positive-class probability of {probability_pct:.2f}%."
-            )
-
 
     st.caption(
-        "This is a model estimate based on learned patterns in the training dataset. "
-        "It is not a guaranteed employment outcome."
+        "This probability is a machine-learning estimate based on "
+        "the trained model and the information entered above."
+    )
+
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True,
     )
 
 
-    # --------------------------------------------------------
-    # STRENGTHS
-    # --------------------------------------------------------
+# ============================================================
+# PROFILE EXPLANATION
+# ============================================================
 
-    if result["strengths"]:
+if "prediction_probability" in st.session_state:
 
-        st.subheader(
-            "💪 Profile Strengths"
-        )
+    strengths, improvements = calculate_profile_summary(
+        st.session_state["student"]
+    )
 
-        for item in result["strengths"]:
+    st.markdown(
+        '<div class="section-title">📊 Prediction Explanation</div>',
+        unsafe_allow_html=True,
+    )
 
-            st.success(
-                f"✓ {item}"
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.subheader("💪 Profile Strengths")
+
+        if strengths:
+
+            for item in strengths:
+                st.success(item)
+
+        else:
+            st.info(
+                "No major strengths were automatically detected. "
+                "The AI guidance below will provide a detailed analysis."
             )
 
+    with col2:
 
-    # --------------------------------------------------------
-    # IMPROVEMENT AREAS
-    # --------------------------------------------------------
+        st.subheader("🎯 Areas To Improve")
 
-    if result["improvements"]:
+        if improvements:
 
-        st.subheader(
-            "⚠️ Factors To Improve"
-        )
+            for item in improvements:
+                st.warning(item)
 
-        for item in result["improvements"]:
-
-            st.warning(
-                f"• {item}"
+        else:
+            st.success(
+                "No major improvement area was automatically detected."
             )
 
 
@@ -2523,111 +1402,140 @@ if result is not None:
 # AI GUIDANCE
 # ============================================================
 
-if ai_button:
+if "prediction_probability" in st.session_state:
 
-    try:
+    st.markdown(
+        '<div class="section-title">🤖 AI Career & Placement Guidance</div>',
+        unsafe_allow_html=True,
+    )
 
-        prediction_context = (
-            "No placement prediction has been generated yet."
+    st.write(
+        f"""
+        Based on your selected career interest **{st.session_state["career_interest"]}**
+        and target role **{st.session_state["target_goal"]}**, Gemini can generate
+        a personalized career roadmap, role guidance, skill-gap analysis,
+        30-day plan and project recommendations.
+        """
+    )
+
+    if not gemini_key:
+
+        st.warning(
+            """
+            Gemini AI is not configured.
+
+            Add your Gemini API key in Streamlit Cloud:
+
+            `GEMINI_API_KEY="your_key_here"`
+            """
         )
 
-        if result is not None:
+    else:
 
-            prediction_context = (
+        generate_button = st.button(
+            "🤖 Generate Personalized AI Guidance",
+            type="secondary",
+            use_container_width=True,
+        )
 
-                f"Model classification: "
-                f"{'PLACED' if result['placed'] else 'NOT PLACED'}\n"
+        if generate_button:
 
-            )
+            with st.spinner(
+                "🤖 Gemini is analyzing your profile and creating your career roadmap..."
+            ):
 
-            if result[
-                "probability"
-            ] is not None:
+                try:
 
-                prediction_context += (
-
-                    "Placement probability: "
-
-                    f"{result['probability'] * 100:.2f}%"
-
-                )
-
-
-        with st.spinner(
-            "Generating personalized AI guidance..."
-        ):
-
-            guidance, provider = (
-                generate_with_gemini(
-
-                    build_ai_prompt(
-
-                        student,
-
-                        prediction_context,
-
+                    ai_response = generate_ai_guidance(
+                        student=st.session_state["student"],
+                        probability=st.session_state[
+                            "prediction_probability"
+                        ],
+                        prediction_label=st.session_state[
+                            "prediction_label"
+                        ],
+                        career_interest=st.session_state[
+                            "career_interest"
+                        ],
+                        target_goal=st.session_state[
+                            "target_goal"
+                        ],
+                        pg_degree=st.session_state[
+                            "pg_degree"
+                        ],
                     )
 
-                )
-            )
+                    st.session_state["ai_response"] = ai_response
 
-        st.session_state.ai_guidance = (
-            guidance
-        )
+                except Exception as e:
 
-        st.session_state.ai_provider = (
-            provider
-        )
+                    st.error(
+                        "AI guidance could not be generated."
+                    )
 
-        st.session_state.student_profile = (
-            student
-        )
-
-    except Exception as exc:
-
-        st.error(
-            "❌ AI guidance could not be generated."
-        )
-
-        st.code(
-            str(exc)
-        )
+                    st.code(
+                        str(e),
+                        language="text",
+                    )
 
 
 # ============================================================
-# AI OUTPUT
+# DISPLAY AI RESPONSE
 # ============================================================
 
-if st.session_state.ai_guidance:
+if "ai_response" in st.session_state:
 
-    st.divider()
-
-    provider = (
-        st.session_state.ai_provider
-        or "Gemini"
-    )
-
-    st.header(
-        f"🤖 Personalized AI Career Guidance"
-    )
-
-    st.caption(
-        f"Generated using {provider}"
+    st.markdown(
+        '<div class="section-title">🧭 Personalized Career Roadmap</div>',
+        unsafe_allow_html=True,
     )
 
     st.markdown(
-        st.session_state.ai_guidance
+        st.session_state["ai_response"]
     )
 
 
 # ============================================================
-# FOOTER
+# MODEL INFORMATION
 # ============================================================
 
-st.divider()
+with st.expander("ℹ️ Model Information"):
+
+    if metadata:
+
+        if isinstance(metadata, dict):
+
+            for key, value in metadata.items():
+
+                if isinstance(value, (dict, list)):
+                    st.write(f"**{key}:**")
+                    st.json(value)
+
+                else:
+                    st.write(
+                        f"**{key}:** {value}"
+                    )
+
+    else:
+
+        st.info(
+            "Model metadata is not available."
+        )
+
+
+# ============================================================
+# DISCLAIMER
+# ============================================================
+
+st.markdown("---")
 
 st.caption(
-    "AI Student Placement Predictor • "
-    "Machine Learning Prediction • "
-    "AI Career Guidance"
+    """
+    ⚠️ Disclaimer: This application is an educational/project
+    demonstration. The placement prediction is generated by a
+    machine-learning model and is not a guarantee of employment.
+    AI career guidance is advisory and should be combined with
+    your own research, college placement guidance and professional
+    advice.
+    """
 )

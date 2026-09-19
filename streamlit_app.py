@@ -101,7 +101,7 @@ def get_branch_skills(branch):
 
 # UG degree list intentionally excludes BCA/BBA/BCom/BA from the UG
 # specialization/major list. Those are degree choices, not branch choices.
-UG_DEGREES = ["BE", "BTech", "BSc", "BCA", "BBA", "BCom", "BA", "Other"]
+UG_DEGREES = ["BE", "BTech", "BSc", "Other"]
 
 UG_SPECIALIZATIONS = [
     "Computer Science",
@@ -161,9 +161,10 @@ UG_SPECIALIZATIONS = [
 # available in PG Specialization. BCA/BBA/BCom/BA are included here because
 # they were explicitly requested for the PG specialization dropdown, while
 # they are not present in the UG specialization dropdown.
-PG_SPECIALIZATIONS = UG_SPECIALIZATIONS.copy()
+PG_SPECIALIZATIONS = UG_SPECIALIZATIONS + ["BCA", "BBA", "BCom", "BA"]
 
 PG_DEGREES = ["MTech", "ME", "MSc", "MCA", "MBA", "MCom", "MA", "MS", "MPhil", "Other"]
+
 # ============================================================
 # CAREER DIRECTION — BASED ON UG + PG, NOT RANDOM
 # ============================================================
@@ -288,6 +289,7 @@ CAREER_TARGETS = {
     "Museum / Heritage": ["Museum Assistant", "Heritage Research Assistant", "Archivist Assistant", "Cultural Program Coordinator"],
     "Other": ["Custom Career Goal"],
 }
+
 BRANCH_CAREER_GROUP = {
     "Computer Science": ["Software Development", "Data Analytics", "Data Science", "Artificial Intelligence / Machine Learning", "Cyber Security", "Cloud / DevOps", "Networking"],
     "Information Technology": ["Software Development", "Data Analytics", "Cloud / DevOps", "Cyber Security", "Networking"],
@@ -379,6 +381,7 @@ SPECIALIZATION_KEYWORDS = {
     "History": ["Research / Academia", "Teaching / Education", "Museum / Heritage", "Government / Public Sector"],
 }
 
+
 def _dedupe(items):
     seen = set()
     output = []
@@ -464,6 +467,7 @@ def map_branch_for_model(branch):
         return "Chemical"
     return "Other"
 
+
 def get_cgpa_category(cgpa):
     if cgpa < 6:
         return "Low"
@@ -512,6 +516,7 @@ def load_components():
 
     return model, feature_names, rules, metadata
 
+
 def get_model_feature_names(model, artifact_features):
     """Use the features the fitted model actually expects.
 
@@ -545,7 +550,7 @@ def get_model_feature_names(model, artifact_features):
                 if names:
                     return names
 
- # This is the exact feature schema used to train the supplied model.
+# This is the exact feature schema used to train the supplied model.
     return [
         "age",
         "cgpa",
@@ -572,47 +577,59 @@ def get_model_feature_names(model, artifact_features):
 
 
 def build_exact_model_input(student, feature_names, model=None):
-    """Build the exact 17-feature input used by the current trained model."""
+    """Build input using the fitted model's real schema.
+
+    IMPORTANT: do not use unsupported/stale feature-artifact columns. The supplied
+    artifact may contain gender_Female, degree_BCA and branch_AI, while the trained
+    model was fitted with only the 21 columns below.
+    """
     if model is not None:
         expected_features = get_model_feature_names(model, feature_names)
     else:
         expected_features = list(feature_names)
 
-   # The current trained model uses these raw features:
-    # age, ug_cgpa, backlogs, internships, projects, certifications,
-    # coding_skills, communication_skills, aptitude_score,
-    # domain_skill_1 ... domain_skill_5, gender, ug_degree, ug_branch
-    domain_scores = list(student.get("branch_skills", {}).values())[:5]
-    while len(domain_scores) < 5:
-        domain_scores.append(5.0)
-        
+    model_branch = map_branch_for_model(student["ug_branch"])
+    degree = student["ug_degree"]
+    gender = student["gender"]
+    category = get_cgpa_category(student["ug_cgpa"])
+
     values = {
         "age": float(student["age"]),
-        "ug_cgpa": float(student["ug_cgpa"]),
+        "cgpa": float(student["ug_cgpa"]),
         "backlogs": float(student["backlogs"]),
         "internships": float(student["internships"]),
-        "projects": float(student["projects"]),
         "certifications": float(student["certifications"]),
         "coding_skills": float(student["coding_skills"]),
         "communication_skills": float(student["communication_skills"]),
         "aptitude_score": float(student["aptitude_score"]),
-        "domain_skill_1": float(domain_scores[0]),
-        "domain_skill_2": float(domain_scores[1]),
-        "domain_skill_3": float(domain_scores[2]),
-        "domain_skill_4": float(domain_scores[3]),
-        "domain_skill_5": float(domain_scores[4]),
-        "gender": str(student["gender"]),
-        "ug_degree": str(student["ug_degree"]),
-        "ug_branch": str(student["ug_branch"]),        
+        "projects": float(student["projects"]),
+        "gender_Male": 1.0 if gender == "Male" else 0.0,
+        "degree_BE": 1.0 if degree == "BE" else 0.0,
+        "degree_BSc": 1.0 if degree == "BSc" else 0.0,
+        "degree_BTech": 1.0 if degree == "BTech" else 0.0,
+        "branch_CS": 1.0 if model_branch == "CS" else 0.0,
+        "branch_DS": 1.0 if model_branch == "DS" else 0.0,
+        "branch_Electrical": 1.0 if model_branch == "Electrical" else 0.0,
+        "branch_IT": 1.0 if model_branch == "IT" else 0.0,
+        "branch_Mechanical": 1.0 if model_branch == "Mechanical" else 0.0,
+        "cgpa_category_Excellent": 1.0 if category == "Excellent" else 0.0,
+        "cgpa_category_Good": 1.0 if category == "Good" else 0.0,
+        "cgpa_category_Low": 1.0 if category == "Low" else 0.0,
     }
+
     unsupported = [f for f in expected_features if f not in values]
     if unsupported:
         raise RuntimeError(
             "The trained model expects feature(s) this app cannot construct: "
-            + ", ".join(unsupported)           
+            + ", ".join(unsupported)
+            + ". Please use the matching model artifact."
         )
 
-    return pd.DataFrame([{f: values[f] for f in expected_features}])
+    # Exact order expected by the fitted estimator.
+    return pd.DataFrame(
+        [{f: values[f] for f in expected_features}],
+        columns=expected_features,
+    )
 
 def get_classes(model):
     classes = getattr(model, "classes_", None)
@@ -732,12 +749,6 @@ def get_profile_gaps(student):
     return gaps[:8]
 
 
-
-
-
-
-
-
 def generate_recommendations(student, rules):
     fallback = {
         "Academic performance": "Focus on improving academic performance and maintaining a consistent CGPA.",
@@ -818,6 +829,7 @@ def get_ai_configuration_status():
     }
 
 
+def build_ai_prompt(student, prediction_context=None):
     skills = "\n".join(f"- {k}: {v}/10" for k, v in student["branch_skills"].items())
     critical = ", ".join(f"{k} ({v}/10)" for k, v in student["branch_skills"].items() if v <= 4) or "None identified"
     prediction_context = prediction_context or "Placement prediction was not requested."
@@ -892,7 +904,6 @@ For Project Ideas provide EXACTLY 3 projects. For each include: title, what to b
 For the 30-Day Improvement Plan use a practical week-by-week or day-range plan.
 Keep the report detailed but focused. Do not output unrelated career paths just to fill space.
 """
-
 
 
 def generate_with_groq(prompt):
@@ -999,7 +1010,6 @@ def generate_with_gemini(prompt):
 
     raise RuntimeError("Gemini models were unavailable after retries.\n" + "\n".join(errors[-8:]))
 
-
 def build_builtin_career_report(student, prediction_context=None):
     """Deterministic fallback so the dashboard remains useful when an AI provider is down."""
     interest = student["career_interest"]
@@ -1068,84 +1078,14 @@ def build_builtin_career_report(student, prediction_context=None):
         f"{ug} Data / Process Analysis Project",
         f"{ug} Research or Industry Case Study",
     ])
-
-    gaps = [name for name, score in weakest if score <= 6]
+     gaps = [name for name, score in weakest if score <= 6]
     gap_text = ", ".join(gaps) if gaps else "No major branch-skill gap was identified from the selected ratings."
     strength_text = ", ".join(f"{name} ({score}/10)" for name, score in strongest)
     pg_text = f"PG specialization: {pg}" if pg else "No PG specialization selected."
 
     return f"""### Built-in Career Guidance\n\nGemini/Groq was temporarily unavailable, so this report was generated by the app's built-in career guidance rules. It is based on the profile entered in the dashboard.\n\n## 1. Overall Profile Assessment\n- UG domain: **{ug}**\n- {pg_text}\n- Career interest: **{interest}**\n- Target role: **{target}**\n- Strongest selected skills: **{strength_text}**\n\n## 2. Career Direction\nYour selected career direction is **{interest}**. Build the portfolio around **{target}**, while using your UG/PG specialization as the domain foundation.\n\n## 3. Career Path to the Target Role\n1. Strengthen the core concepts required for {interest}.\n2. Learn the main tools listed below and use them in practical work.\n3. Complete the three portfolio projects below and publish documented work on GitHub.\n4. Add internship, research, teaching, volunteering, freelance, or supervised practical experience where appropriate.\n5. Prepare role-specific interview questions and a focused resume.\n\n## 4. Top Strengths\n- {strength_text}\n- Projects: {student['projects']}\n- Internships: {student['internships']}\n- Certifications: {student['certifications']}\n- Communication: {student['communication_skills']}/10\n\n## 5. Skill Gap Analysis\nMain areas to improve from the selected skill ratings: **{gap_text}**.\n\n## 6. Areas to Improve\n- Build more role-specific practical evidence.\n- Practice communication and interview explanations.\n- Improve the lowest-rated technical/domain skills first.\n- Keep GitHub projects documented with README files, screenshots, setup steps and results.\n\n## 7. 30-Day Improvement Plan\n- **Days 1-7:** Revise fundamentals for {interest}; identify the exact skills needed for {target}.\n- **Days 8-14:** Build Project 1 and document the work.\n- **Days 15-21:** Build Project 2 and complete targeted practice/interview questions.\n- **Days 22-30:** Finish Project 3, improve resume/GitHub, and conduct mock interviews.\n\n## 8. Technical Topics to Study\nFocus on the core concepts of **{interest}**, then the tools below.\n\n## 9. Industry Tools and Professional Skills\n**Suggested tools:** {tools}\n\n## 10. Project Ideas\n### 1. {projects[0]}\nBuild a complete, documented version relevant to **{target}**. Demonstrate problem solving, domain knowledge, implementation and measurable results.\n\n### 2. {projects[1]}\nCreate a second project that solves a different practical problem in the same career direction. Include data/process/design decisions and a clear README.\n\n### 3. {projects[2]}\nCreate a third project that shows depth, testing/evaluation and professional presentation.\n\n## 11. Teaching and Research Options\n- **Teaching:** consider tutoring, subject-content creation, lab assistance, workshops or a future lecturer/teacher path if it matches your qualifications.\n- **Research:** consider literature reviews, research projects, faculty-guided work, research internships or a postgraduate/PhD path.\n\n## 12. Interview Preparation\nPrepare a 60-second introduction, explain each project clearly, revise core domain concepts, and practice behavioral questions using real examples from your experience.\n\n## 13. GitHub and Resume Plan\nKeep 3-5 strong projects pinned, add clear README files, include technologies and outcomes, and tailor the resume to **{target}**.\n\n## 14. 3-Month Roadmap\n- **Month 1:** fundamentals + Project 1.\n- **Month 2:** Project 2 + internship/research/teaching applications.\n- **Month 3:** Project 3 + resume + GitHub + mock interviews + targeted applications.\n\n## 15. Final Action Checklist\n- [ ] Strengthen the weakest skills.\n- [ ] Finish exactly 3 strong portfolio projects.\n- [ ] Publish and document projects on GitHub.\n- [ ] Improve resume for {target}.\n- [ ] Practice technical and behavioral interviews.\n- [ ] Apply for relevant internships, jobs, research or teaching opportunities.\n"""
 
-def build_ai_prompt(student, prediction_context=None):
-        if isinstance(student, str):
-            student = {
-                "ug_degree": student,
-                "ug_branch": "Not provided",
-                "ug_cgpa": "Not provided",
-                "pg_degree": "Not Applicable",
-                "pg_branch": "Not Applicable",
-                "pg_cgpa": "Not Applicable",
-                "career_interest": "Not selected",
-                "target_career": "Not selected",
-        }
-    
-       context = prediction_context or {}
 
-       strengths = context.get("strengths", [])
-       gaps = context.get("gaps", [])
-       probability = context.get("probability")
-
-    return f"""
-You are an AI career guidance assistant for a college student.
-
-Student profile:
-- Age: {student.get("age", "Not provided")}
-- Gender: {student.get("gender", "Not provided")}
-- UG Degree: {student.get("ug_degree", "Not provided")}
-- UG Specialization: {student.get("ug_branch", "Not provided")}
-- UG CGPA: {student.get("ug_cgpa", student.get("cgpa", "Not provided"))}
-- Backlogs: {student.get("backlogs", 0)}
-- PG Degree: {student.get("pg_degree", "Not Applicable")}
-- PG Specialization: {student.get("pg_branch", "Not Applicable")}
-- PG CGPA: {student.get("pg_cgpa", "Not Applicable")}
-- Internships: {student.get("internships", 0)}
-- Projects: {student.get("projects", 0)}
-- Certifications: {student.get("certifications", 0)}
-- Communication Skills: {student.get("communication_skills", 0)}
-- Coding Skills: {student.get("coding_skills", 0)}
-- Aptitude Score: {student.get("aptitude_score", 0)}
-- Career Interest: {student.get("career_interest", "Not selected")}
-- Target Career Goal: {student.get("target_career", "Not selected")}
-
-Placement context:
-- Model probability: {probability if probability is not None else "Not available"}
-- Strengths: {", ".join(strengths) if strengths else "Not available"}
-- Gaps: {", ".join(gaps) if gaps else "Not available"}
-
-Give practical, personalized career guidance based only on this student's profile.
-
-Include exactly these sections:
-
-1. Overall Profile Assessment
-2. Career Direction
-3. Career Path
-4. Top Strengths
-5. Skill Gap Analysis
-6. Areas to Improve
-7. 30-Day Improvement Plan
-8. Technical Topics to Learn
-9. Tools to Practice
-10. Exactly 3 Project Ideas
-11. Teaching and Research Options
-12. Interview Preparation
-13. GitHub and Resume Plan
-14. 3-Month Roadmap
-15. Final Action Checklist
-
-Make the recommendations relevant to the student's UG and PG background.
-Do not invent experience, qualifications, or achievements.
-"""
-    
 def generate_ai_guidance(student, prediction_context=None):
     prompt = build_ai_prompt(student, prediction_context)
     errors = []
@@ -1173,7 +1113,6 @@ def generate_ai_guidance(student, prediction_context=None):
 # ============================================================
 # STUDENT PROFILE
 # ============================================================
-
 def build_student_profile(
     gender, age, ug_degree, ug_branch, ug_cgpa, has_pg, pg_degree,
     pg_branch, pg_cgpa, backlogs, internships, projects, certifications,
@@ -1209,7 +1148,6 @@ def build_student_profile(
 # ============================================================
 # UI
 # ============================================================
-
 st.title("🎓 AI Student Placement Predictor")
 st.write("A dashboard-style placement assessment with field-specific career guidance.")
 st.info("⚠️ Placement probability is a model estimate based on the training data. It is not a guarantee of employment.")
@@ -1265,7 +1203,6 @@ if has_pg:
         pg_branch = st.selectbox("PG Specialization", PG_SPECIALIZATIONS)
     with c3:
         pg_cgpa = st.number_input("PG CGPA", 0.0, 10.0, 7.0, 0.1)
-
 st.subheader("💼 Placement Profile")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
@@ -1412,6 +1349,7 @@ if result is not None:
             st.error("AI guidance failed unexpectedly.")
             st.code(str(exc))
 
+
 # ============================================================
 # AI RESULT
 # ============================================================
@@ -1424,3 +1362,4 @@ if st.session_state.ai_career_advice:
 
 st.divider()
 st.caption("AI Student Placement Predictor | Dashboard + ML Placement Assessment + UG/PG-Aware Career Guidance")
+
